@@ -212,3 +212,39 @@ def test_ui_app_js_source_hygiene():
     assert '"Model-B"' not in content
     assert "rec_transfer_m26" not in content
 
+def test_ui_reset_demo_and_tooltip_elements():
+    """
+    Verify Reset Demo button and Delivery Delay Score tooltip exist in the served UI.
+    """
+    res = client.get("/")
+    assert res.status_code == 200
+    html = res.text
+    # 1. Reset control exists
+    assert 'id="btn-reset-demo"' in html
+    assert "↺ Reset Demo" in html
+    # 2. Delivery Impact Score tooltip text exists
+    expected_tooltip = "Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty."
+    assert expected_tooltip in html
+
+def test_reset_flow_canonical_values_and_db_immutability():
+    """
+    Verify the reset flow executes the canonical scenario and leaves the DB immutable.
+    """
+    initial_hash = _get_db_hash()
+    canonical_prompt = "M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost."
+    res = client.post("/api/analyze", json={"prompt": canonical_prompt})
+    assert res.status_code == 200
+    data = res.json()
+
+    assert data["impact_summary"]["capacity_loss_units"] == 211.2
+    assert data["impact_summary"]["affected_order_count"] == 6
+    assert data["impact_summary"]["high_priority_affected_count"] == 3
+    assert data["selected_plan"]["plan_id"] == "PLAN_TRANSFER_07"
+    assert data["selected_plan"]["target_machine_id"] == "M26"
+    assert data["selected_plan"]["weighted_score"] == 0.6881
+    assert data["selected_plan"]["cost_impact_usd"] == 100.0
+
+    # DB hash verified
+    assert _get_db_hash() == initial_hash
+
+

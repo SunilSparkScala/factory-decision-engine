@@ -532,14 +532,34 @@ whatIfInput.addEventListener("keydown", (e) => {
   }
 });
 
+const CANONICAL_SCENARIO = "M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.";
+
 // Preset Chips
-document.querySelectorAll(".preset-chip").forEach((chip) => {
+document.querySelectorAll(".preset-chip[data-preset]").forEach((chip) => {
   chip.addEventListener("click", () => {
     const text = chip.getAttribute("data-preset");
-    scenarioInput.value = text;
-    analyzeScenario(text);
+    if (text) {
+      scenarioInput.value = text;
+      analyzeScenario(text);
+    }
   });
 });
+
+// Reset Demo Button
+const btnResetDemo = document.getElementById("btn-reset-demo");
+if (btnResetDemo) {
+  btnResetDemo.addEventListener("click", () => {
+    scenarioInput.value = CANONICAL_SCENARIO;
+    whatIfInput.value = "";
+    // Reset tabs back to Feasible
+    tabFeasible.classList.add("active");
+    tabInfeasible.classList.remove("active");
+    feasiblePlansList.classList.remove("hidden");
+    infeasiblePlansList.classList.add("hidden");
+    // Re-run canonical flow
+    analyzeScenario(CANONICAL_SCENARIO);
+  });
+}
 
 // What-If Chips
 document.querySelectorAll(".what-if-chip").forEach((chip) => {

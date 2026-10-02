@@ -84,6 +84,9 @@
         <button class="preset-chip" data-preset="Machine M999 will be unavailable for 8 hours.">
           <strong>Test:</strong> Unknown Machine (Error State)
         </button>
+        <button id="btn-reset-demo" class="preset-chip btn-reset" title="Restore canonical scenario and baseline analysis">
+          <span>↺ Reset Demo</span>
+        </button>
       </div>
     </section>
 
@@ -174,7 +177,10 @@
         </div>
 
         <div class="metric-card">
-          <div class="metric-label">DELIVERY IMPACT SCORE</div>
+          <div class="metric-label">
+            DELIVERY IMPACT SCORE
+            <span class="info-tooltip" title="Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty.">ⓘ</span>
+          </div>
           <div class="metric-value-row">
             <span id="metric-delivery-impact" class="metric-val text-amber">--</span>
             <span class="metric-unit">/ 1.00</span>
