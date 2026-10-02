@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factory Decision Engine | Decision Intelligence System</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="theme-industrial">
+  <!-- TOP APP HEADER -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo-mark">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+          <circle cx="12" cy="10" r="3"></circle>
+        </svg>
+      </div>
+      <div>
+        <div class="app-title-row">
+          <h1 class="app-title">FACTORY DECISION ENGINE</h1>
+          <span class="system-badge">v4.3 ADK INTELLIGENCE</span>
+        </div>
+        <p class="app-tagline">"Before you change the factory, understand what happens next."</p>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div id="provenance-badge" class="provenance-badge mode-fallback">
+        <span class="indicator-dot"></span>
+        <span id="provenance-text">Deterministic fallback — Gemini unavailable</span>
+      </div>
+      <div class="safety-badge">
+        <span class="lock-icon">🔒</span>
+        <span>HUMAN APPROVAL MANDATORY</span>
+      </div>
+      <div class="db-badge">
+        <span class="db-icon">🗄️</span>
+        <span>DB IMMUTABLE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="main-container">
+    <!-- SCENARIO CONTROLS BAR -->
+    <section class="scenario-panel">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <span class="panel-icon">⚡</span>
+          <h2>OPERATIONAL DISRUPTION SCENARIO</h2>
+        </div>
+        <span class="panel-hint">Enter natural-language disruption or select an operational preset:</span>
+      </div>
+
+      <div class="scenario-input-wrapper">
+        <textarea 
+          id="scenario-input" 
+          rows="2" 
+          placeholder="e.g., M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost."
+        >M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.</textarea>
+        <button id="btn-analyze" class="btn btn-primary">
+          <span class="btn-text">Analyze Scenario</span>
+          <span class="btn-subtext">Deterministic Simulation & Optimization</span>
+        </button>
+      </div>
+
+      <div class="presets-row">
+        <span class="preset-label">SCENARIO PRESETS:</span>
+        <button class="preset-chip" data-preset="M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.">
+          <strong>Preset 1:</strong> M17 8h Downtime (Cost & Priority)
+        </button>
+        <button class="preset-chip" data-preset="What if overtime is not allowed?">
+          <strong>Preset 2:</strong> What if overtime is not allowed?
+        </button>
+        <button class="preset-chip" data-preset="What if M17 is unavailable for 12 hours instead?">
+          <strong>Preset 3:</strong> What if M17 is down for 12 hours?
+        </button>
+        <button class="preset-chip" data-preset="Machine M999 will be unavailable for 8 hours.">
+          <strong>Test:</strong> Unknown Machine (Error State)
+        </button>
+      </div>
+    </section>
+
+    <!-- LOADING STEPPER (Hidden by default) -->
+    <section id="loading-stepper" class="loading-stepper hidden">
+      <div class="stepper-title">
+        <div class="spinner"></div>
+        <span>RUNNING DETERMINISTIC DECISION INTELLIGENCE PIPELINE...</span>
+      </div>
+      <div class="stepper-track">
+        <div class="step-node" id="step-1">
+          <div class="step-dot"></div>
+          <span class="step-label">1. Understanding scenario</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-node" id="step-2">
+          <div class="step-dot"></div>
+          <span class="step-label">2. Tracing factory impact</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-node" id="step-3">
+          <div class="step-dot"></div>
+          <span class="step-label">3. Simulating disruption</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-node" id="step-4">
+          <div class="step-dot"></div>
+          <span class="step-label">4. Evaluating recovery options</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-node" id="step-5">
+          <div class="step-dot"></div>
+          <span class="step-label">5. Checking engineering constraints</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-node" id="step-6">
+          <div class="step-dot"></div>
+          <span class="step-label">6. Generating recommendation</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ERROR BANNER -->
+    <div id="error-banner" class="error-banner hidden">
+      <div class="error-icon">⚠️</div>
+      <div class="error-body">
+        <h4 id="error-title">Scenario Validation Error</h4>
+        <p id="error-message">Error details will appear here.</p>
+        <div id="error-clarification" class="error-clarification hidden"></div>
+      </div>
+    </div>
+
+    <!-- RESULTS WORKSPACE -->
+    <div id="results-workspace" class="results-workspace">
+      
+      <!-- TOP STORY ROW: DEPENDENCY CHAIN -->
+      <section class="card impact-chain-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="step-num">STEP 1</span>
+            <h3>FACTORY TOPOLOGY IMPACT CHAIN</h3>
+          </div>
+          <span class="card-badge">LIVE TRACE DATA</span>
+        </div>
+        <div class="impact-chain-container" id="impact-chain-nodes">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </section>
+
+      <!-- SECOND STORY ROW: IMPACT SUMMARY METRICS -->
+      <section class="impact-summary-grid">
+        <div class="metric-card">
+          <div class="metric-label">CAPACITY LOSS</div>
+          <div class="metric-value-row">
+            <span id="metric-capacity-loss" class="metric-val text-red">--</span>
+            <span id="metric-capacity-pct" class="metric-subval">--</span>
+          </div>
+          <div class="metric-footer">Based on 8h machine nominal rate</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label">AFFECTED ORDERS</div>
+          <div class="metric-value-row">
+            <span id="metric-affected-orders" class="metric-val text-amber">--</span>
+            <span id="metric-high-priority" class="priority-pill">-- HIGH PRIORITY</span>
+          </div>
+          <div class="metric-footer" id="metric-models-list">Models: --</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label">DELIVERY IMPACT SCORE</div>
+          <div class="metric-value-row">
+            <span id="metric-delivery-impact" class="metric-val text-amber">--</span>
+            <span class="metric-unit">/ 1.00</span>
+          </div>
+          <div class="metric-footer">Normalized impact penalty (0.00 best, 1.00 worst)</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label">DELIVERY RISK LEVEL</div>
+          <div class="metric-value-row">
+            <span id="metric-risk-level" class="risk-badge">--</span>
+          </div>
+          <div class="metric-footer">Customer SLA breach risk rating</div>
+        </div>
+
+        <div class="metric-card proxy-card">
+          <div class="metric-label">SYNTHETIC PROXIES</div>
+          <div class="proxy-row">
+            <span>Quality Penalty: <strong id="metric-quality-score">--</strong></span>
+            <span>Energy Proxy: <strong id="metric-energy-kwh">-- kWh</strong></span>
+          </div>
+          <div class="metric-footer text-muted">Indicates synthetic proxy evaluation metrics</div>
+        </div>
+      </section>
+
+      <!-- THIRD STORY ROW: THE DOMINANT RECOMMENDATION PANEL -->
+      <section class="card recommendation-card">
+        <div class="rec-banner">
+          <div class="rec-banner-left">
+            <span class="rec-kicker">RECOMMENDED OPERATIONAL ACTION</span>
+            <h2 id="rec-action-title" class="rec-title">Waiting for analysis...</h2>
+            <div class="rec-sub-info">
+              <span id="rec-plan-id" class="badge-plan-id">PLAN_--</span>
+              <span id="rec-strategy" class="badge-strategy">--</span>
+              <span class="rec-meta">Optimal deterministic composite score: <strong id="rec-score">--</strong></span>
+            </div>
+          </div>
+          <div class="rec-banner-right">
+            <!-- HUMAN APPROVAL BOX -->
+            <div class="approval-box">
+              <div class="approval-header">
+                <span class="alert-icon">⚠️</span>
+                <strong>HUMAN APPROVAL REQUIRED: YES</strong>
+              </div>
+              <p class="approval-text">
+                Decision engine operates in advisory mode. Factory schedule and PLC dispatch are NOT mutated autonomously. A supervisor must review and sign off.
+              </p>
+              <button class="btn btn-secondary btn-sm" id="btn-mock-approve">Review & Sign Off</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- REASONING BREAKDOWN -->
+        <div class="rec-reasons-grid">
+          <div class="reason-block">
+            <h4>WHY THIS PLAN WON</h4>
+            <ul id="rec-why-list" class="why-list">
+              <li>Pending operational scenario evaluation...</li>
+            </ul>
+          </div>
+          <div class="trade-off-summary-block">
+            <h4>OBJECTIVE COMPROMISE</h4>
+            <div class="trade-off-stats" id="rec-tradeoff-stats">
+              <div class="trade-stat">
+                <span class="ts-label">Estimated Cost:</span>
+                <span id="rec-cost-val" class="ts-val">--</span>
+              </div>
+              <div class="trade-stat">
+                <span class="ts-label">Delivery Impact:</span>
+                <span id="rec-del-val" class="ts-val">--</span>
+              </div>
+              <div class="trade-stat">
+                <span class="ts-label">Quality Score:</span>
+                <span id="rec-qual-val" class="ts-val">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FOURTH STORY ROW: WHAT-IF SENSITIVITY INTERACTION -->
+      <section class="card what-if-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="step-num">WHAT-IF</span>
+            <h3>SENSITIVITY EXPLORATION & CONSTRAINT TESTING</h3>
+          </div>
+          <span class="card-badge">INTERACTIVE ENGINE</span>
+        </div>
+        <div class="what-if-controls">
+          <p class="what-if-desc">
+            Test policy constraints or priority pivots against the deterministic engine in real time:
+          </p>
+          <div class="what-if-chips">
+            <button class="what-if-chip" data-query="What if overtime is not allowed?">
+              🚫 Disallow Overtime
+            </button>
+            <button class="what-if-chip" data-query="What if cost is the priority?">
+              💰 Prioritize Cost Minimization
+            </button>
+            <button class="what-if-chip" data-query="What if M17 is unavailable for 12 hours instead?">
+              ⏱️ Extend Downtime to 12 Hours
+            </button>
+            <button class="what-if-chip" data-query="What if we cannot transfer to another line?">
+              🔒 Disallow Cross-Line Transfers
+            </button>
+          </div>
+          <div class="what-if-input-row">
+            <input 
+              type="text" 
+              id="what-if-input" 
+              placeholder="Type custom what-if question (e.g., 'What if delivery is our only priority?')"
+            />
+            <button id="btn-what-if" class="btn btn-secondary">Simulate What-If</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- FIFTH STORY ROW: TWO-COLUMN RECOVERY ALTERNATIVES & TRADE-OFF BREAKDOWN -->
+      <div class="two-col-layout">
+        
+        <!-- LEFT COL: RECOVERY OPTIONS (FEASIBLE VS INFEASIBLE) -->
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="step-num">ALTERNATIVES</span>
+              <h3>RECOVERY CANDIDATE PLANS</h3>
+            </div>
+            <span class="card-badge" id="alternatives-count-badge">-- PLANS</span>
+          </div>
+
+          <div class="alternatives-tabs">
+            <button class="alt-tab active" id="tab-feasible">
+              FEASIBLE (<span id="count-feasible">0</span>)
+            </button>
+            <button class="alt-tab" id="tab-infeasible">
+              INFEASIBLE (<span id="count-infeasible">0</span>)
+            </button>
+          </div>
+
+          <!-- FEASIBLE LIST -->
+          <div id="feasible-plans-list" class="plans-list">
+            <!-- Populated via JS -->
+          </div>
+
+          <!-- INFEASIBLE LIST -->
+          <div id="infeasible-plans-list" class="plans-list hidden">
+            <!-- Populated via JS -->
+          </div>
+        </section>
+
+        <!-- RIGHT COL: MULTI-OBJECTIVE TRADE-OFF VIEW -->
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="step-num">TRADE-OFFS</span>
+              <h3>OBJECTIVE WEIGHTS & SCORING</h3>
+            </div>
+            <span class="card-badge">OPTIMIZER BREAKDOWN</span>
+          </div>
+          <p class="trade-off-intro">
+            Applied objective weights determine how competing trade-offs are balanced by the deterministic evaluation engine:
+          </p>
+
+          <div class="weights-bars-container" id="weights-bars-container">
+            <!-- Populated via JS -->
+          </div>
+
+          <div class="trade-off-rationale-box">
+            <div class="box-title">ENGINE RATIONALE & PROVENANCE</div>
+            <p id="engine-rationale-text" class="rationale-text">--</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- SIXTH STORY ROW: VERIFIABLE ENGINEERING EVIDENCE -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="step-num">EVIDENCE</span>
+            <h3>GROUNDED ENGINEERING KNOWLEDGE & EVIDENCE</h3>
+          </div>
+          <span class="card-badge" id="evidence-count-badge">-- DOCUMENTS</span>
+        </div>
+        <p class="evidence-intro">
+          Deterministic knowledge retrieval matched against incident histories, machine manuals, and quality SOPs:
+        </p>
+        <div class="evidence-grid" id="evidence-grid">
+          <!-- Populated via JS -->
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-left">
+      <span>Factory Decision Engine &copy; 2026 | Decision Intelligence System</span>
+    </div>
+    <div class="footer-center">
+      <span>Tagline: "Before you change the factory, understand what happens next."</span>
+    </div>
+    <div class="footer-right">
+      <span>Deterministic Engine: Immutable State</span>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
