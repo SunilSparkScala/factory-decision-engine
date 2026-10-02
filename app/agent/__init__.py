@@ -11,9 +11,12 @@ from app.agent.tools import (
     map_user_priorities_to_weights,
 )
 from app.agent.agent import FactoryDecisionAgent
+from app.agent.orchestrator import DecisionOrchestrator, ScenarioParser
 
 __all__ = [
     "FactoryDecisionAgent",
+    "DecisionOrchestrator",
+    "ScenarioParser",
     "DecisionResponse",
     "EvidenceItem",
     "CandidatePlanSummary",

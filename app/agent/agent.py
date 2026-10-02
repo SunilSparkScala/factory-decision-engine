@@ -21,6 +21,10 @@ from app.agent.schemas import (
     EvidenceItem,
     CandidatePlanSummary,
 )
+from app.agent.orchestrator import (
+    DecisionOrchestrator,
+    ScenarioParser,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,9 @@ class FactoryDecisionAgent:
         if self.api_key:
             os.environ["GEMINI_API_KEY"] = self.api_key
             os.environ["GOOGLE_API_KEY"] = self.api_key
+
+        # Decision Orchestrator handles deterministic workflow, dependency trace & multi-objective scoring
+        self.orchestrator = DecisionOrchestrator()
 
         # Initialize Google ADK Agent
         self.adk_agent = Agent(
@@ -69,226 +76,39 @@ class FactoryDecisionAgent:
         downtime_hours: float,
         priorities: Optional[Union[Dict[str, float], str]] = None,
         start_time: Optional[str] = None,
+        constraints: Optional[Dict[str, bool]] = None,
         execution_mode: str = "deterministic_fallback",
         fallback_reason: Optional[str] = None,
+        clarification_needed: Optional[str] = None,
     ) -> DecisionResponse:
         """
         Execute deterministic end-to-end decision orchestration:
-        1. Inspect machine status
+        1. Inspect machine status & dependency trace
         2. Simulate failure impact
-        3. Evaluate recovery plans with user priorities
-        4. Retrieve relevant engineering evidence
-        5. Formulate structured recommendation
+        3. Generate recovery plans & filter operational constraints
+        4. Evaluate recovery plans with user priorities
+        5. Retrieve relevant engineering evidence
+        6. Formulate structured recommendation with human approval boundary
         """
-        # Step 1: Query machine status
-        machine_status = get_machine_status(machine_id)
-        if not machine_status.get("success"):
-            return DecisionResponse(
-                scenario_summary=f"Failure analysis for {machine_id}",
-                assumptions=[],
-                impact_summary={"error": machine_status.get("error", "Unknown machine")},
-                rationale=f"Cannot formulate recovery plan: {machine_status.get('error')}",
-                risks=["Target machine is unrecognized in factory database."],
-                human_approval_required=True,
-                execution_mode=execution_mode,
-                fallback_reason=fallback_reason,
-            )
-
-        # Step 2: Simulate failure impact
-        sim_result = simulate_machine_failure(
+        from app.agent.tools import evaluate_recovery_plans as default_eval_fn
+        import app.agent.agent as agent_mod
+        tool_eval_fn = getattr(agent_mod, "evaluate_recovery_plans", None)
+        passed_eval_fn = tool_eval_fn if tool_eval_fn is not default_eval_fn else None
+        return self.orchestrator.orchestrate(
             machine_id=machine_id,
             downtime_hours=downtime_hours,
+            priorities=priorities,
             start_time=start_time,
-        )
-        if not sim_result.get("success"):
-            return DecisionResponse(
-                scenario_summary=f"Failure simulation on {machine_id}",
-                assumptions=[],
-                impact_summary={"error": sim_result.get("error", "Simulation failure")},
-                rationale=f"Simulation failed: {sim_result.get('error')}",
-                risks=["Invalid simulation parameters."],
-                human_approval_required=True,
-                execution_mode=execution_mode,
-                fallback_reason=fallback_reason,
-            )
-
-        # Step 3: Multi-objective evaluation & optimal plan selection
-        eval_result = evaluate_recovery_plans(
-            machine_id=machine_id,
-            downtime_hours=downtime_hours,
-            weights=priorities,
-            start_time=start_time,
-        )
-
-        # Step 4: Retrieve engineering evidence
-        evidence_items: List[EvidenceItem] = []
-        seen_doc_ids = set()
-
-        # Query A: Machine-specific manual and specs
-        kb_machine = search_engineering_knowledge(machine_id=machine_id, limit=2)
-        for doc in kb_machine.get("evidence", []):
-            if doc["document_id"] not in seen_doc_ids:
-                seen_doc_ids.add(doc["document_id"])
-                evidence_items.append(EvidenceItem(**doc))
-
-        # Query B: Strategy-specific SOP or guidelines
-        strategy_type = ""
-        if eval_result.get("selected_plan"):
-            strategy_type = str(eval_result["selected_plan"].get("strategy_type", "")).lower()
-
-        strategy_query_map = {
-            "machine_transfer": ("quality inspection machine transfer requirements", "quality"),
-            "resequence": ("production order resequencing priority handling", "sop"),
-            "resequencing": ("production order resequencing priority handling", "sop"),
-            "overtime": ("extended shift overtime authorization rules", "overtime"),
-        }
-
-        if strategy_type in strategy_query_map:
-            query_text, topic_filter = strategy_query_map[strategy_type]
-            kb_strategy = search_engineering_knowledge(query=query_text, topic=topic_filter, limit=2)
-            for doc in kb_strategy.get("evidence", []):
-                if doc["document_id"] not in seen_doc_ids:
-                    seen_doc_ids.add(doc["document_id"])
-                    evidence_items.append(EvidenceItem(**doc))
-
-        # General operational safety check if machine is degraded
-        if machine_status.get("status") == "DEGRADED":
-            kb_degraded = search_engineering_knowledge(query="degraded machinery operating guidelines", topic="maintenance", limit=1)
-            for doc in kb_degraded.get("evidence", []):
-                if doc["document_id"] not in seen_doc_ids:
-                    seen_doc_ids.add(doc["document_id"])
-                    evidence_items.append(EvidenceItem(**doc))
-
-        # Step 5: Format candidates & selected plan
-        candidate_plans: List[CandidatePlanSummary] = []
-        for c in eval_result.get("candidates", []):
-            candidate_plans.append(
-                CandidatePlanSummary(
-                    plan_id=c["plan_id"],
-                    strategy_type=c["strategy_type"],
-                    description=c.get("description", f"Strategy: {c['strategy_type']}"),
-                    is_feasible=c["is_feasible"],
-                    infeasibility_reasons=c.get("infeasibility_reasons", []),
-                    actions_summary=c.get("actions_summary", "N/A"),
-                    weighted_score=c.get("weighted_score"),
-                    cost_impact_usd=c.get("cost_usd"),
-                    delivery_delay_score=c.get("delay_score"),
-                )
-            )
-
-        selected_plan_summary = None
-        if eval_result.get("selected_plan"):
-            sp = eval_result["selected_plan"]
-            selected_plan_summary = CandidatePlanSummary(
-                plan_id=sp["plan_id"],
-                strategy_type=sp["strategy_type"],
-                description=sp["description"],
-                is_feasible=sp["is_feasible"],
-                actions_summary=sp["actions_summary"],
-                weighted_score=sp["weighted_score"],
-                cost_impact_usd=sp["cost_impact_usd"],
-                delivery_delay_score=sp["delivery_delay_score"],
-                quality_penalty_score=sp["quality_penalty_score"],
-                energy_kwh=sp["energy_kwh"],
-                risk_score=sp["risk_score"],
-            )
-
-        # Step 6: Formulate rationale & risks
-        applied_weights = eval_result.get("applied_weights", {})
-        high_priority_count = sim_result.get("high_priority_affected_count", 0)
-
-        rationale_parts = []
-        if selected_plan_summary:
-            rationale_parts.append(
-                f"Selected plan '{selected_plan_summary.plan_id}' ({selected_plan_summary.strategy_type.upper()}) "
-                f"achieves the optimal multi-objective score of {selected_plan_summary.weighted_score:.4f} "
-                f"under applied weights (Delivery: {applied_weights.get('delivery', 0.0):.1%}, Cost: {applied_weights.get('cost', 0.0):.1%})."
-            )
-            if high_priority_count > 0:
-                rationale_parts.append(
-                    f"Successfully mitigates schedule disruption for {high_priority_count} critical high-priority customer order(s)."
-                )
-
-            # Evidence grounding
-            transfer_evidence = [e for e in evidence_items if "KB-QTY" in e.document_id or "KB-SOP" in e.document_id]
-            if transfer_evidence:
-                top_ev = transfer_evidence[0]
-                rationale_parts.append(
-                    f"According to [{top_ev.document_id}] ('{top_ev.title}'): \"{top_ev.excerpt}\""
-                )
-            else:
-                rationale_parts.append("No supporting engineering document was retrieved for this operational pattern.")
-        else:
-            rationale_parts.append(
-                "None of the candidate recovery plans met feasibility criteria. "
-                "Immediate manual supervisory intervention or expedited external maintenance is required."
-            )
-
-        risks = []
-        if selected_plan_summary:
-            st_lower = selected_plan_summary.strategy_type.lower()
-            if st_lower == "machine_transfer":
-                risks.append("Setup and tooling calibration required on target machine before volume run.")
-                risks.append("Mandatory First Article Inspection (FAI) must be signed off by QA.")
-            elif st_lower == "overtime":
-                risks.append("Overtime labor premium incurred ($50.00/hr).")
-                risks.append("Shift fatigue and maintenance window compression risk.")
-            elif st_lower in ("resequence", "resequencing"):
-                risks.append("Lower-priority orders will absorb delay into downstream production queues.")
-        else:
-            risks.append("Complete line throughput halt during downtime window.")
-
-        risks.append("Bottleneck station starvation risk if downtime exceeds forecasted window.")
-
-        # Step 7: Construct final structured DecisionResponse
-        return DecisionResponse(
-            scenario_summary=f"Unscheduled downtime on {machine_id} for {downtime_hours} hours",
-            assumptions=[
-                f"Failure initiated at {start_time or 'immediate operational shift'}.",
-                "Machine nominal throughput rates and line speeds remain at baseline specifications.",
-                "Deterministic cost benchmarks and capacity limits applied per factory policy.",
-            ],
-            impact_summary={
-                "machine_id": machine_id,
-                "downtime_hours": downtime_hours,
-                "capacity_loss_units": sim_result.get("capacity_loss_units", 0.0),
-                "capacity_loss_percentage": sim_result.get("capacity_loss_percentage", 0.0),
-                "delivery_risk": sim_result.get("delivery_risk", "LOW"),
-                "affected_order_count": sim_result.get("affected_order_count", 0),
-                "high_priority_affected_count": sim_result.get("high_priority_affected_count", 0),
-                "bottleneck_station_id": sim_result.get("bottleneck_station_id"),
-                "alternative_machines": sim_result.get("alternative_machines", []),
-            },
-            affected_orders=sim_result.get("affected_orders", []),
-            candidate_plans=candidate_plans,
-            selected_plan=selected_plan_summary,
-            objective_weights=applied_weights,
-            engineering_evidence=evidence_items,
-            rationale=" ".join(rationale_parts),
-            risks=risks,
-            human_approval_required=True,
+            constraints=constraints,
             execution_mode=execution_mode,
             fallback_reason=fallback_reason,
+            clarification_needed=clarification_needed,
+            eval_fn=passed_eval_fn,
         )
 
     def _parse_scenario_prompt(self, prompt: str) -> Dict[str, Any]:
-        """Extract machine ID, downtime hours, and priority keywords from natural-language text."""
-        # 1. Machine ID
-        machine_match = re.search(r"\b(M\d{2})\b", prompt, re.IGNORECASE)
-        machine_id = machine_match.group(1).upper() if machine_match else "M17"
-
-        # 2. Downtime hours
-        downtime_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:hours|hrs|hr|h)\b", prompt, re.IGNORECASE)
-        downtime_hours = float(downtime_match.group(1)) if downtime_match else 8.0
-
-        # 3. Priority description
-        priorities = prompt
-
-        return {
-            "machine_id": machine_id,
-            "downtime_hours": downtime_hours,
-            "priorities": priorities,
-        }
+        """Extract machine ID, downtime hours, priority keywords, and constraints from natural-language text."""
+        return ScenarioParser.parse(prompt)
 
     def _run_live_adk(self, prompt: str) -> DecisionResponse:
         """
@@ -364,130 +184,54 @@ class FactoryDecisionAgent:
         downtime_hours = parsed_params["downtime_hours"]
         priorities = parsed_params["priorities"]
 
-        # 1. Extract simulation results from tool responses or run deterministically
-        sim_resp = None
+        # Check if simulate_machine_failure was executed during live run
         for tr in reversed(tool_responses):
             if tr.get("name") == "simulate_machine_failure" and isinstance(tr.get("response"), dict) and tr["response"].get("success"):
-                sim_resp = tr["response"]
+                machine_id = tr["response"].get("machine_id", machine_id)
+                downtime_hours = float(tr["response"].get("downtime_hours", downtime_hours))
                 break
 
-        if sim_resp:
-            machine_id = sim_resp.get("machine_id", machine_id)
-            downtime_hours = float(sim_resp.get("downtime_hours", downtime_hours))
-        else:
-            sim_resp = simulate_machine_failure(machine_id, downtime_hours)
-
-        # 2. Extract multi-objective evaluation results or run deterministically
+        # Check if evaluate_recovery_plans was executed during live run
         eval_resp = None
         for tr in reversed(tool_responses):
             if tr.get("name") == "evaluate_recovery_plans" and isinstance(tr.get("response"), dict) and tr["response"].get("success"):
                 eval_resp = tr["response"]
                 break
 
-        if not eval_resp or not eval_resp.get("success"):
-            eval_resp = evaluate_recovery_plans(machine_id, downtime_hours, weights=priorities)
-
-        # 3. Extract knowledge retrieval results
-        evidence_items: List[EvidenceItem] = []
+        # Check if search_engineering_knowledge was executed during live run
+        live_evidence: List[EvidenceItem] = []
         seen_doc_ids = set()
         for tr in tool_responses:
             if tr.get("name") == "search_engineering_knowledge" and isinstance(tr.get("response"), dict):
                 for doc in tr["response"].get("evidence", []):
                     if isinstance(doc, dict) and doc.get("document_id") and doc["document_id"] not in seen_doc_ids:
                         seen_doc_ids.add(doc["document_id"])
-                        evidence_items.append(EvidenceItem(**doc))
+                        live_evidence.append(EvidenceItem(**doc))
 
-        if not evidence_items:
-            kb_res = search_engineering_knowledge(machine_id=machine_id, limit=2)
-            for doc in kb_res.get("evidence", []):
-                if doc["document_id"] not in seen_doc_ids:
-                    seen_doc_ids.add(doc["document_id"])
-                    evidence_items.append(EvidenceItem(**doc))
-
-        # 4. Construct candidate plans from deterministic evaluation
-        candidate_plans: List[CandidatePlanSummary] = []
-        for c in eval_resp.get("candidates", []):
-            candidate_plans.append(
-                CandidatePlanSummary(
-                    plan_id=c["plan_id"],
-                    strategy_type=c["strategy_type"],
-                    description=c.get("description", f"Strategy: {c['strategy_type']}"),
-                    is_feasible=c["is_feasible"],
-                    infeasibility_reasons=c.get("infeasibility_reasons", []),
-                    actions_summary=c.get("actions_summary", "N/A"),
-                    weighted_score=c.get("weighted_score"),
-                    cost_impact_usd=c.get("cost_usd"),
-                    delivery_delay_score=c.get("delay_score"),
-                )
-            )
-
-        selected_plan_summary = None
-        if eval_resp.get("selected_plan"):
-            sp = eval_resp["selected_plan"]
-            selected_plan_summary = CandidatePlanSummary(
-                plan_id=sp["plan_id"],
-                strategy_type=sp["strategy_type"],
-                description=sp["description"],
-                is_feasible=sp["is_feasible"],
-                actions_summary=sp["actions_summary"],
-                weighted_score=sp["weighted_score"],
-                cost_impact_usd=sp["cost_impact_usd"],
-                delivery_delay_score=sp["delivery_delay_score"],
-                quality_penalty_score=sp.get("quality_penalty_score"),
-                energy_kwh=sp.get("energy_kwh"),
-                risk_score=sp.get("risk_score"),
-            )
-
-        # 5. Rationale & operational risks
-        rationale = model_text.strip() if model_text and model_text.strip() else (
-            f"Selected optimal recovery plan {selected_plan_summary.plan_id} ({selected_plan_summary.strategy_type}) "
-            f"achieving weighted objective score of {selected_plan_summary.weighted_score:.4f}."
-            if selected_plan_summary
-            else "None of the candidate recovery plans met feasibility criteria."
-        )
-
-        risks = []
-        if selected_plan_summary:
-            st_lower = selected_plan_summary.strategy_type.lower()
-            if "transfer" in st_lower:
-                risks.append("Setup and tooling calibration required on target machine before volume run.")
-                risks.append("Mandatory First Article Inspection (FAI) must be signed off by QA.")
-            elif "overtime" in st_lower:
-                risks.append("Overtime labor premium incurred ($50.00/hr).")
-                risks.append("Shift fatigue and maintenance window compression risk.")
-            elif "resequence" in st_lower:
-                risks.append("Lower-priority orders will absorb delay into downstream production queues.")
-        risks.append("Bottleneck station starvation risk if downtime exceeds forecasted window.")
-
-        return DecisionResponse(
-            scenario_summary=f"Unscheduled downtime on {machine_id} for {downtime_hours} hours",
-            assumptions=[
-                "Machine nominal throughput rates and line speeds remain at baseline specifications.",
-                "Deterministic cost benchmarks and capacity limits applied per factory policy.",
-                "Multi-objective optimization executed via deterministic evaluation engine.",
-            ],
-            impact_summary={
-                "machine_id": machine_id,
-                "downtime_hours": downtime_hours,
-                "capacity_loss_units": sim_resp.get("capacity_loss_units", 0.0),
-                "capacity_loss_percentage": sim_resp.get("capacity_loss_percentage", 0.0),
-                "delivery_risk": sim_resp.get("delivery_risk", "LOW"),
-                "affected_order_count": sim_resp.get("affected_order_count", 0),
-                "high_priority_affected_count": sim_resp.get("high_priority_affected_count", 0),
-                "bottleneck_station_id": sim_resp.get("bottleneck_station_id"),
-                "alternative_machines": sim_resp.get("alternative_machines", []),
+        # Produce complete deterministic response using harvested tool results
+        base_decision = self.orchestrator.orchestrate(
+            machine_id=machine_id,
+            downtime_hours=downtime_hours,
+            priorities=priorities,
+            constraints={
+                "disallow_overtime": parsed_params.get("disallow_overtime", False),
+                "disallow_cross_line_transfer": parsed_params.get("disallow_cross_line_transfer", False),
+                "disallow_all_transfers": parsed_params.get("disallow_all_transfers", False),
             },
-            affected_orders=sim_resp.get("affected_orders", []),
-            candidate_plans=candidate_plans,
-            selected_plan=selected_plan_summary,
-            objective_weights=eval_resp.get("applied_weights", {}),
-            engineering_evidence=evidence_items,
-            rationale=rationale,
-            risks=risks,
-            human_approval_required=True,
             execution_mode="live_gemini",
             fallback_reason=None,
+            clarification_needed=parsed_params.get("clarification_needed"),
+            eval_fn=(lambda *a, **kw: eval_resp) if eval_resp else None,
         )
+
+        if live_evidence:
+            base_decision.engineering_evidence = live_evidence
+
+        # Overlay Gemini model rationale if generated
+        if model_text and model_text.strip():
+            base_decision.rationale = model_text.strip()
+
+        return base_decision
 
     def run(self, prompt: str) -> DecisionResponse:
         """
@@ -495,6 +239,13 @@ class FactoryDecisionAgent:
         Uses live Google ADK Runner + Gemini tool-call loop when API credentials exist,
         or deterministic local workflow orchestration if credentials are unavailable or if live execution fails.
         """
+        parsed = self._parse_scenario_prompt(prompt)
+        constraints = {
+            "disallow_overtime": parsed.get("disallow_overtime", False),
+            "disallow_cross_line_transfer": parsed.get("disallow_cross_line_transfer", False),
+            "disallow_all_transfers": parsed.get("disallow_all_transfers", False),
+        }
+
         if self.api_key:
             try:
                 return self._run_live_adk(prompt)
@@ -503,42 +254,43 @@ class FactoryDecisionAgent:
                     f"Live Gemini ADK execution failed: {e}. Falling back to deterministic local orchestration.",
                     exc_info=True,
                 )
-                params = self._parse_scenario_prompt(prompt)
                 return self.orchestrate_scenario(
-                    machine_id=params["machine_id"],
-                    downtime_hours=params["downtime_hours"],
-                    priorities=params["priorities"],
+                    machine_id=parsed["machine_id"],
+                    downtime_hours=parsed["downtime_hours"],
+                    priorities=parsed["priorities"],
+                    constraints=constraints,
                     execution_mode="deterministic_fallback",
                     fallback_reason=f"Live Gemini ADK execution failed ({type(e).__name__}: {str(e)}); used deterministic fallback.",
+                    clarification_needed=parsed.get("clarification_needed"),
                 )
         else:
-            params = self._parse_scenario_prompt(prompt)
             return self.orchestrate_scenario(
-                machine_id=params["machine_id"],
-                downtime_hours=params["downtime_hours"],
-                priorities=params["priorities"],
+                machine_id=parsed["machine_id"],
+                downtime_hours=parsed["downtime_hours"],
+                priorities=parsed["priorities"],
+                constraints=constraints,
                 execution_mode="deterministic_fallback",
                 fallback_reason="No GEMINI_API_KEY configured; running in deterministic fallback mode.",
+                clarification_needed=parsed.get("clarification_needed"),
             )
 
     def what_if(
         self,
         previous_response: DecisionResponse,
+        follow_up_prompt: Optional[str] = None,
         updated_downtime: Optional[float] = None,
         updated_priorities: Optional[Union[Dict[str, float], str]] = None,
         updated_machine_id: Optional[str] = None,
+        updated_constraints: Optional[Dict[str, bool]] = None,
     ) -> DecisionResponse:
         """
         Perform what-if sensitivity analysis, executing a fresh deterministic simulation and optimization run.
         """
-        machine_id = updated_machine_id or previous_response.impact_summary.get("machine_id", "M17")
-        downtime = updated_downtime if updated_downtime is not None else previous_response.impact_summary.get("downtime_hours", 8.0)
-        priorities = updated_priorities if updated_priorities is not None else previous_response.objective_weights
-
-        return self.orchestrate_scenario(
-            machine_id=machine_id,
-            downtime_hours=downtime,
-            priorities=priorities,
-            execution_mode=previous_response.execution_mode,
-            fallback_reason=previous_response.fallback_reason,
+        return self.orchestrator.what_if(
+            previous_response=previous_response,
+            follow_up_prompt=follow_up_prompt,
+            updated_downtime=updated_downtime,
+            updated_priorities=updated_priorities,
+            updated_machine_id=updated_machine_id,
+            updated_constraints=updated_constraints,
         )
