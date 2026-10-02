@@ -58,12 +58,16 @@ def _generate_transfer_plans(
     downtime_hrs = impact.capacity_impact.downtime_hours
     affected_order_ids = [o.order_id for o in impact.affected_orders]
 
+    state = get_factory_state(db_path=db_path)
+    line_lookup = {l.line_id: l for l in state.production_lines}
+
     for idx, candidate in enumerate(impact.alternative_candidates, start=1):
         plan_id = f"PLAN_TRANSFER_{idx:02d}"
         checked_constraints = [
             "failed_machine_exclusion",
             "machine_status_operational",
             "operation_type_compatibility",
+            "target_line_model_compatibility",
             "capacity_availability",
             "schedule_conflict_check",
         ]
@@ -79,8 +83,19 @@ def _generate_transfer_plans(
                 f"Target machine {candidate.machine_id} is unavailable with status {candidate.status.value}."
             )
 
-        # Check 3: Existing schedule conflict check
-        state = get_factory_state(db_path=db_path)
+        # Check 3: Target line model compatibility check
+        target_line = line_lookup.get(candidate.line_id)
+        if target_line and impact.affected_orders:
+            supported = set(target_line.supported_models)
+            incompatible_orders = [o for o in impact.affected_orders if o.product_model not in supported]
+            if incompatible_orders:
+                incompatible_models = sorted(list(set(o.product_model for o in incompatible_orders)))
+                infeasible_reasons.append(
+                    f"Target line {candidate.line_id} supports models {sorted(list(supported))}, "
+                    f"which is incompatible with affected order model(s): {incompatible_models}."
+                )
+
+        # Check 4: Existing schedule conflict check
         cand_schedules = [s for s in state.production_schedules if s.machine_id == candidate.machine_id]
         if impact.scenario.start_time and cand_schedules:
             end_window = impact.scenario.start_time + timedelta(hours=downtime_hrs)
@@ -92,7 +107,7 @@ def _generate_transfer_plans(
                     f"Candidate machine {candidate.machine_id} has {len(overlapping)} overlapping schedule conflicts during the recovery window."
                 )
 
-        # Check 4: Capacity recovery calculation
+        # Check 5: Capacity recovery calculation
         potential_capacity = candidate.capacity_per_hour * downtime_hrs
         recovered_units = min(lost_units, potential_capacity)
         remaining_gap = max(0.0, lost_units - recovered_units)
@@ -113,6 +128,7 @@ def _generate_transfer_plans(
                 "target_station_id": candidate.station_id,
                 "target_capacity_per_hour": candidate.capacity_per_hour,
                 "target_health_score": candidate.health_score,
+                "target_supported_models": target_line.supported_models if target_line else [],
             },
         )
 

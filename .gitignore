@@ -11,4 +11,8 @@ data/generated/*
 !data/generated/.gitkeep
 venv/
 .env
+.env.*
 .venv/
+credentials*.json
+service_account*.json
+

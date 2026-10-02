@@ -151,3 +151,107 @@ def test_dynamic_plans_different_failures():
     targets01 = {p.actions[0].target_machine_id for p in transfer01}
 
     assert targets17 != targets01
+
+def test_transfer_fully_compatible():
+    """Verify transfer is feasible when all affected orders match target line supported models."""
+    from app.models import ProductionOrder, OrderPriority
+    from datetime import datetime
+    impact = simulate_machine_failure(machine_id="M17", downtime_hours=4.0)
+    # Line C supports Model-C and Model-X. Set all affected orders to Model-C
+    impact.affected_orders = [
+        ProductionOrder(
+            order_id="TEST_ORD_01",
+            product_model="Model-C",
+            quantity=10,
+            priority=OrderPriority.HIGH,
+            due_time=datetime.now(),
+            assigned_line="LINE_B",
+        )
+    ]
+    plans = generate_recovery_plans(impact)
+    # Find transfer to M26 (Line C)
+    plan_m26 = next((p for p in plans if p.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER and p.actions[0].target_machine_id == "M26"), None)
+    assert plan_m26 is not None
+    assert "target_line_model_compatibility" in plan_m26.feasibility.checked_constraints
+    assert not any("incompatible with affected order model" in r for r in plan_m26.feasibility.infeasible_reasons)
+
+def test_transfer_fully_incompatible():
+    """Verify transfer is flagged infeasible when affected orders are incompatible with target line."""
+    from app.models import ProductionOrder, OrderPriority
+    from datetime import datetime
+    impact = simulate_machine_failure(machine_id="M17", downtime_hours=4.0)
+    # Line A supports Model-S and Model-E, not Model-C. Set order to Model-C
+    impact.affected_orders = [
+        ProductionOrder(
+            order_id="TEST_ORD_02",
+            product_model="Model-C",
+            quantity=10,
+            priority=OrderPriority.HIGH,
+            due_time=datetime.now(),
+            assigned_line="LINE_B",
+        )
+    ]
+    plans = generate_recovery_plans(impact)
+    # Find transfer to M04 (Line A)
+    plan_m04 = next((p for p in plans if p.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER and p.actions[0].target_machine_id == "M04"), None)
+    assert plan_m04 is not None
+    assert plan_m04.feasibility.is_feasible is False
+    assert any("incompatible with affected order model(s): ['Model-C']" in r for r in plan_m04.feasibility.infeasible_reasons)
+
+def test_transfer_mixed_affected_orders():
+    """Verify transfer is marked infeasible when only some affected orders are compatible."""
+    from app.models import ProductionOrder, OrderPriority
+    from datetime import datetime
+    impact = simulate_machine_failure(machine_id="M17", downtime_hours=4.0)
+    # Line C supports Model-C and Model-X. Mixed orders: Model-C and Model-E
+    impact.affected_orders = [
+        ProductionOrder(
+            order_id="TEST_ORD_C",
+            product_model="Model-C",
+            quantity=10,
+            priority=OrderPriority.HIGH,
+            due_time=datetime.now(),
+            assigned_line="LINE_B",
+        ),
+        ProductionOrder(
+            order_id="TEST_ORD_E",
+            product_model="Model-E",
+            quantity=10,
+            priority=OrderPriority.HIGH,
+            due_time=datetime.now(),
+            assigned_line="LINE_B",
+        ),
+    ]
+    plans = generate_recovery_plans(impact)
+    # Target M26 on Line C: Model-E is incompatible
+    plan_m26 = next((p for p in plans if p.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER and p.actions[0].target_machine_id == "M26"), None)
+    assert plan_m26 is not None
+    assert plan_m26.feasibility.is_feasible is False
+    assert any("incompatible with affected order model(s): ['Model-E']" in r for r in plan_m26.feasibility.infeasible_reasons)
+
+def test_transfer_m17_to_m26_scenario_with_model_e():
+    """Ensure Model-E orders on M17 are never transferred to Line C machines (e.g. M26)."""
+    from app.models import ProductionOrder, OrderPriority
+    from datetime import datetime
+    impact = simulate_machine_failure(machine_id="M17", downtime_hours=8.0)
+    # Force affected order to Model-E
+    impact.affected_orders = [
+        ProductionOrder(
+            order_id="TEST_ORD_E1",
+            product_model="Model-E",
+            quantity=15,
+            priority=OrderPriority.HIGH,
+            due_time=datetime.now(),
+            assigned_line="LINE_B",
+        )
+    ]
+    plans = generate_recovery_plans(impact)
+    line_c_transfers = [
+        p for p in plans
+        if p.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER and p.actions[0].target_machine_id in ("M25", "M26", "M27")
+    ]
+    assert len(line_c_transfers) > 0
+    for p in line_c_transfers:
+        assert p.feasibility.is_feasible is False
+        assert any("incompatible with affected order model(s): ['Model-E']" in r for r in p.feasibility.infeasible_reasons)
+
