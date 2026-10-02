@@ -24,3 +24,6 @@ class KnowledgeSearchResult(BaseModel):
     matched_topics: List[str] = []
     excerpt: str
     source_type: str = "synthetic"
+    machine_ids: List[str] = []
+    station_ids: List[str] = []
+    line_ids: List[str] = []
