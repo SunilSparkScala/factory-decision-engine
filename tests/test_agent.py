@@ -376,3 +376,38 @@ def test_live_gemini_tool_loop():
     assert len(resp.candidate_plans) > 0
     assert len(resp.rationale) > 0
 
+
+def test_conversational_what_if_via_agent_run():
+    """
+    Verify agent.run() handles follow-up what-if queries without machine ID
+    by automatically applying them to the active base scenario.
+    """
+    agent = FactoryDecisionAgent()
+
+    # Step 1: Run base scenario
+    r1 = agent.run("Machine M17 will be unavailable for 8 hours. Maintain high-priority deliveries while minimizing cost.")
+    assert r1.impact_summary["machine_id"] == "M17"
+    assert r1.impact_summary["downtime_hours"] == 8.0
+    assert r1.impact_summary["capacity_loss_units"] == 211.2
+    assert len(r1.feasible_alternatives) == 7
+
+    # Step 2: Follow-up what-if without machine ID
+    r2 = agent.run("What if overtime is not allowed?")
+    assert r2.clarification_needed is None
+    assert r2.impact_summary["machine_id"] == "M17"
+    assert r2.impact_summary["downtime_hours"] == 8.0
+    assert r2.impact_summary["capacity_loss_units"] == 211.2
+    assert len(r2.feasible_alternatives) == 6
+    assert len(r2.infeasible_alternatives) == 4
+
+    # Overtime plan is infeasible
+    ot = next(p for p in r2.candidate_plans if "OVERTIME" in p.strategy_type)
+    assert ot.is_feasible is False
+
+    # Step 3: When reset, running what-if without base scenario returns clarification
+    agent.reset_state()
+    r3 = agent.run("What if overtime is not allowed?")
+    assert r3.clarification_needed is not None
+    assert r3.selected_plan is None
+
+

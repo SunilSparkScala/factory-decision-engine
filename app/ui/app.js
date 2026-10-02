@@ -111,6 +111,17 @@ async function analyzeScenario(promptText) {
   const prompt = (promptText || scenarioInput.value || "").trim();
   if (!prompt) return;
 
+  // Check if this is a follow-up what-if query without machine ID on an active base scenario
+  const isWhatIfPrompt =
+    /^what\s+if/i.test(prompt) ||
+    /^(suppose|assume)\b/i.test(prompt) ||
+    (!prompt.match(/\bM\d+\b/i) && currentResponse && currentResponse.impact_summary && currentResponse.impact_summary.machine_id);
+
+  if (isWhatIfPrompt && currentResponse && currentResponse.impact_summary && currentResponse.impact_summary.machine_id) {
+    whatIfInput.value = prompt;
+    return runWhatIf(prompt);
+  }
+
   hideError();
   isRunning = true;
   loadingStepper.classList.remove("hidden");
@@ -122,7 +133,10 @@ async function analyzeScenario(promptText) {
     const res = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt }),
+      body: JSON.stringify({
+        prompt: prompt,
+        previous_response: currentResponse || null,
+      }),
     });
 
     const data = await res.json();
@@ -200,6 +214,7 @@ async function runWhatIf(followUpPrompt) {
 
     currentResponse = data;
     scenarioInput.value = query;
+    whatIfInput.value = query;
     renderUI(data);
   } catch (err) {
     isRunning = false;
@@ -540,7 +555,13 @@ document.querySelectorAll(".preset-chip[data-preset]").forEach((chip) => {
     const text = chip.getAttribute("data-preset");
     if (text) {
       scenarioInput.value = text;
-      analyzeScenario(text);
+      const isWhatIf = (/^what\s+if/i.test(text) || /^(suppose|assume)\b/i.test(text)) && !text.match(/\bM\d+\b/i);
+      if (isWhatIf && currentResponse && currentResponse.impact_summary && currentResponse.impact_summary.machine_id) {
+        whatIfInput.value = text;
+        runWhatIf(text);
+      } else {
+        analyzeScenario(text);
+      }
     }
   });
 });

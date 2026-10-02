@@ -248,3 +248,136 @@ def test_reset_flow_canonical_values_and_db_immutability():
     assert _get_db_hash() == initial_hash
 
 
+def test_what_if_preserves_base_scenario_state_via_analyze():
+    """
+    Regression Test 1-4:
+    1. Analyze M17 8h works and returns canonical impact.
+    2. What-if 'What if overtime is not allowed?' preserves M17, 8h downtime, and factory impact.
+    3. Overtime plan becomes infeasible.
+    4. The result is recalculated (feasible plans 7 -> 6, infeasible 3 -> 4) rather than returning original result.
+    5. No 'machine ID required' clarification error is raised.
+    """
+    # Step 1: Base analysis
+    base_res = client.post("/api/analyze", json={
+        "prompt": "Machine M17 will be unavailable for 8 hours. Maintain high-priority deliveries while minimizing cost."
+    })
+    assert base_res.status_code == 200
+    base_data = base_res.json()
+
+    assert base_data["impact_summary"]["machine_id"] == "M17"
+    assert base_data["impact_summary"]["downtime_hours"] == 8.0
+    assert base_data["impact_summary"]["capacity_loss_units"] == 211.2
+    assert base_data["impact_summary"]["affected_order_count"] == 6
+    assert base_data["impact_summary"]["high_priority_affected_count"] == 3
+    assert len(base_data["feasible_alternatives"]) == 7
+    assert len(base_data["infeasible_alternatives"]) == 3
+
+    # Verify overtime plan is initially feasible
+    ot_plans = [p for p in base_data["candidate_plans"] if "OVERTIME" in p["strategy_type"]]
+    assert len(ot_plans) >= 1
+    assert any(p["is_feasible"] for p in ot_plans)
+
+    # Step 2: What-if follow-up through /api/analyze without repeating machine ID
+    what_if_res = client.post("/api/analyze", json={
+        "prompt": "What if overtime is not allowed?",
+        "previous_response": base_data,
+    })
+    assert what_if_res.status_code == 200
+    what_if_data = what_if_res.json()
+
+    # Verify no clarification error
+    assert what_if_data.get("clarification_needed") is None
+    assert what_if_data["selected_plan"] is not None
+
+    # Verify base scenario state is preserved
+    assert what_if_data["impact_summary"]["machine_id"] == "M17"
+    assert what_if_data["impact_summary"]["downtime_hours"] == 8.0
+    assert what_if_data["impact_summary"]["capacity_loss_units"] == 211.2
+    assert what_if_data["impact_summary"]["affected_order_count"] == 6
+    assert what_if_data["impact_summary"]["high_priority_affected_count"] == 3
+
+    # Verify overtime plan became infeasible
+    ot_plans_after = [p for p in what_if_data["candidate_plans"] if "OVERTIME" in p["strategy_type"]]
+    assert len(ot_plans_after) >= 1
+    for p in ot_plans_after:
+        assert p["is_feasible"] is False
+        assert any("overtime is strictly disallowed" in r.lower() for r in p["infeasibility_reasons"])
+
+    # Verify result is recalculated: feasible count changed 7 -> 6, infeasible 3 -> 4
+    assert len(what_if_data["feasible_alternatives"]) == 6
+    assert len(what_if_data["infeasible_alternatives"]) == 4
+
+
+def test_what_if_preserves_different_base_machine_m04():
+    """
+    Regression Test 5 & 6:
+    Proves NO hardcoded M17 in what-if handling.
+    Analyzes M04 8h as the base scenario, then tests what-if constraint.
+    M04, 8h, and 238.4 capacity loss must be preserved, NOT overwritten with M17.
+    """
+    # Base analysis on machine M04
+    base_res = client.post("/api/analyze", json={
+        "prompt": "Machine M04 will be unavailable for 8 hours."
+    })
+    assert base_res.status_code == 200
+    base_data = base_res.json()
+
+    assert base_data["impact_summary"]["machine_id"] == "M04"
+    assert base_data["impact_summary"]["downtime_hours"] == 8.0
+    assert base_data["impact_summary"]["capacity_loss_units"] == 238.4
+
+    # Follow-up what-if without machine ID
+    what_if_res = client.post("/api/analyze", json={
+        "prompt": "What if overtime is not allowed?",
+        "previous_response": base_data,
+    })
+    assert what_if_res.status_code == 200
+    what_if_data = what_if_res.json()
+
+    # Confirms M04 is preserved, not replaced by M17
+    assert what_if_data["impact_summary"]["machine_id"] == "M04"
+    assert what_if_data["impact_summary"]["downtime_hours"] == 8.0
+    assert what_if_data["impact_summary"]["capacity_loss_units"] == 238.4
+    assert what_if_data["selected_plan"] is not None
+
+    # Overtime plans are infeasible for M04
+    for p in what_if_data["candidate_plans"]:
+        if "OVERTIME" in p["strategy_type"]:
+            assert p["is_feasible"] is False
+
+
+def test_existing_m17_12h_behavior_remains_unchanged():
+    """
+    Regression Test:
+    Verify existing Preset 3 (M17 12h) behavior is preserved and produces 316.8 capacity loss.
+    """
+    res = client.post("/api/analyze", json={
+        "prompt": "What if M17 is unavailable for 12 hours instead?"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["impact_summary"]["machine_id"] == "M17"
+    assert data["impact_summary"]["downtime_hours"] == 12.0
+    assert data["impact_summary"]["capacity_loss_units"] == 316.8
+    assert data["selected_plan"] is not None
+
+
+def test_no_hardcoded_scenario_calculations_in_frontend():
+    """
+    Verify frontend app.js does not contain hardcoded scenario outputs or fake calculations.
+    """
+    from pathlib import Path
+    app_js_path = Path(__file__).resolve().parent.parent / "app" / "ui" / "app.js"
+    content = app_js_path.read_text(encoding="utf-8")
+
+    # Confirm no hardcoded optimization / plan logic on frontend
+    assert "simulate_machine_failure" not in content
+    assert "generate_recovery_plans" not in content
+    assert "evaluate_recovery_plans" not in content
+    # Confirm no hardcoded machine calculations
+    assert "211.2" not in content
+    assert "316.8" not in content
+    assert "238.4" not in content
+
+
+

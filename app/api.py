@@ -39,9 +39,10 @@ agent = FactoryDecisionAgent()
 
 class AnalyzeRequest(BaseModel):
     prompt: str = Field(..., description="Natural-language operational scenario or disruption prompt")
+    previous_response: Optional[DecisionResponse] = Field(None, description="Previous DecisionResponse object for follow-up sensitivity context")
 
 class WhatIfRequest(BaseModel):
-    previous_response: DecisionResponse = Field(..., description="Previous DecisionResponse object")
+    previous_response: Optional[DecisionResponse] = Field(None, description="Previous DecisionResponse object")
     follow_up_prompt: Optional[str] = Field(None, description="What-if sensitivity question or constraint change")
     updated_downtime: Optional[float] = Field(None, description="Direct downtime parameter override")
     updated_priorities: Optional[Any] = Field(None, description="Direct priority parameter override")
@@ -69,7 +70,7 @@ async def analyze_scenario(req: AnalyzeRequest):
         raise HTTPException(status_code=400, detail="Scenario prompt cannot be empty.")
 
     try:
-        decision = agent.run(req.prompt.strip())
+        decision = agent.run(req.prompt.strip(), previous_response=req.previous_response)
         return decision
     except UnknownMachineError as e:
         logger.warning(f"Unknown machine error: {e}")
@@ -88,9 +89,15 @@ async def analyze_what_if(req: WhatIfRequest):
     Takes previous decision and follow-up prompt or parameter overrides.
     Re-runs deterministic simulation & optimization without mutating factory database.
     """
+    prev_resp = req.previous_response or agent.last_response
+    if prev_resp is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No prior scenario available for what-if sensitivity analysis. Please run an initial scenario first."
+        )
     try:
         updated_decision = agent.what_if(
-            previous_response=req.previous_response,
+            previous_response=prev_resp,
             follow_up_prompt=req.follow_up_prompt,
             updated_downtime=req.updated_downtime,
             updated_priorities=req.updated_priorities,
