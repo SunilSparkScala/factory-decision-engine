@@ -607,16 +607,24 @@ class DecisionOrchestrator:
         Does NOT mutate the factory database.
         """
         # Baseline from previous response
-        machine_id = updated_machine_id or previous_response.impact_summary.get("machine_id", "M17")
-        downtime = updated_downtime if updated_downtime is not None else previous_response.impact_summary.get("downtime_hours", 8.0)
+        machine_id = (
+            updated_machine_id
+            or (previous_response.impact_summary.get("machine_id") if previous_response.impact_summary else None)
+            or (previous_response.dependency_chain.get("machine_id") if previous_response.dependency_chain else None)
+        )
+        downtime = (
+            updated_downtime
+            if updated_downtime is not None
+            else (previous_response.impact_summary.get("downtime_hours", 8.0) if previous_response.impact_summary else 8.0)
+        )
         priorities = updated_priorities if updated_priorities is not None else previous_response.objective_weights
-        constraints = updated_constraints or {}
+        constraints = dict(updated_constraints or {})
 
         # If a follow-up natural-language prompt is provided, parse it
         if follow_up_prompt:
             parsed = ScenarioParser.parse(follow_up_prompt)
             # Check if prompt specifies a different machine
-            if re.search(r"\b(M\d{2})\b", follow_up_prompt, re.IGNORECASE):
+            if re.search(r"\b(M\d+)\b", follow_up_prompt, re.IGNORECASE):
                 machine_id = parsed["machine_id"]
             # Check if prompt specifies a different downtime
             if re.search(r"(\d+(?:\.\d+)?)\s*(?:hours|hrs|hr|h)\b", follow_up_prompt, re.IGNORECASE):

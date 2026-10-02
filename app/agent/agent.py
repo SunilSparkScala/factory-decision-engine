@@ -70,6 +70,9 @@ class FactoryDecisionAgent:
             auto_create_session=True,
         )
 
+        # Retained state for interactive / conversational what-if sensitivity analysis
+        self.last_response: Optional[DecisionResponse] = None
+
     def orchestrate_scenario(
         self,
         machine_id: str,
@@ -94,7 +97,7 @@ class FactoryDecisionAgent:
         import app.agent.agent as agent_mod
         tool_eval_fn = getattr(agent_mod, "evaluate_recovery_plans", None)
         passed_eval_fn = tool_eval_fn if tool_eval_fn is not default_eval_fn else None
-        return self.orchestrator.orchestrate(
+        res = self.orchestrator.orchestrate(
             machine_id=machine_id,
             downtime_hours=downtime_hours,
             priorities=priorities,
@@ -105,6 +108,9 @@ class FactoryDecisionAgent:
             clarification_needed=clarification_needed,
             eval_fn=passed_eval_fn,
         )
+        if res.selected_plan is not None and not res.clarification_needed:
+            self.last_response = res
+        return res
 
     def _parse_scenario_prompt(self, prompt: str) -> Dict[str, Any]:
         """Extract machine ID, downtime hours, priority keywords, and constraints from natural-language text."""
@@ -231,15 +237,33 @@ class FactoryDecisionAgent:
         if model_text and model_text.strip():
             base_decision.rationale = model_text.strip()
 
+        if base_decision.selected_plan is not None and not base_decision.clarification_needed:
+            self.last_response = base_decision
+
         return base_decision
 
-    def run(self, prompt: str) -> DecisionResponse:
+    def run(self, prompt: str, previous_response: Optional[DecisionResponse] = None) -> DecisionResponse:
         """
         Execute user request against the decision agent.
         Uses live Google ADK Runner + Gemini tool-call loop when API credentials exist,
         or deterministic local workflow orchestration if credentials are unavailable or if live execution fails.
         """
+        if previous_response is not None:
+            self.last_response = previous_response
+
         parsed = self._parse_scenario_prompt(prompt)
+
+        # If machine ID is not provided, check if this is a follow-up what-if on the active base scenario
+        if not parsed.get("machine_id") and self.last_response is not None:
+            is_what_if = (
+                parsed.get("disallow_overtime")
+                or parsed.get("disallow_cross_line_transfer")
+                or parsed.get("disallow_all_transfers")
+                or bool(re.search(r"\b(what\s+if|suppose|assume|constraint|overtime|delay|cost|priority|deliver|speed|downtime|hours?)\b", prompt, re.I))
+            )
+            if is_what_if:
+                return self.what_if(self.last_response, follow_up_prompt=prompt)
+
         constraints = {
             "disallow_overtime": parsed.get("disallow_overtime", False),
             "disallow_cross_line_transfer": parsed.get("disallow_cross_line_transfer", False),
@@ -286,7 +310,7 @@ class FactoryDecisionAgent:
         """
         Perform what-if sensitivity analysis, executing a fresh deterministic simulation and optimization run.
         """
-        return self.orchestrator.what_if(
+        res = self.orchestrator.what_if(
             previous_response=previous_response,
             follow_up_prompt=follow_up_prompt,
             updated_downtime=updated_downtime,
@@ -294,3 +318,10 @@ class FactoryDecisionAgent:
             updated_machine_id=updated_machine_id,
             updated_constraints=updated_constraints,
         )
+        if res.selected_plan is not None and not res.clarification_needed:
+            self.last_response = res
+        return res
+
+    def reset_state(self) -> None:
+        """Reset cached scenario state."""
+        self.last_response = None

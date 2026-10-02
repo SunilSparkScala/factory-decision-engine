@@ -111,6 +111,17 @@ async function analyzeScenario(promptText) {
   const prompt = (promptText || scenarioInput.value || "").trim();
   if (!prompt) return;
 
+  // Check if this is a follow-up what-if query without machine ID on an active base scenario
+  const isWhatIfPrompt =
+    /^what\s+if/i.test(prompt) ||
+    /^(suppose|assume)\b/i.test(prompt) ||
+    (!prompt.match(/\bM\d+\b/i) && currentResponse && currentResponse.impact_summary && currentResponse.impact_summary.machine_id);
+
+  if (isWhatIfPrompt && currentResponse && currentResponse.impact_summary && currentResponse.impact_summary.machine_id) {
+    whatIfInput.value = prompt;
+    return runWhatIf(prompt);
+  }
+
   hideError();
   isRunning = true;
   loadingStepper.classList.remove("hidden");
@@ -122,7 +133,10 @@ async function analyzeScenario(promptText) {
     const res = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt }),
+      body: JSON.stringify({
+        prompt: prompt,
+        previous_response: currentResponse || null,
+      }),
     });
 
     const data = await res.json();
@@ -200,6 +214,7 @@ async function runWhatIf(followUpPrompt) {
 
     currentResponse = data;
     scenarioInput.value = query;
+    whatIfInput.value = query;
     renderUI(data);
   } catch (err) {
     isRunning = false;
@@ -532,14 +547,40 @@ whatIfInput.addEventListener("keydown", (e) => {
   }
 });
 
+const CANONICAL_SCENARIO = "M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.";
+
 // Preset Chips
-document.querySelectorAll(".preset-chip").forEach((chip) => {
+document.querySelectorAll(".preset-chip[data-preset]").forEach((chip) => {
   chip.addEventListener("click", () => {
     const text = chip.getAttribute("data-preset");
-    scenarioInput.value = text;
-    analyzeScenario(text);
+    if (text) {
+      scenarioInput.value = text;
+      const isWhatIf = (/^what\s+if/i.test(text) || /^(suppose|assume)\b/i.test(text)) && !text.match(/\bM\d+\b/i);
+      if (isWhatIf && currentResponse && currentResponse.impact_summary && currentResponse.impact_summary.machine_id) {
+        whatIfInput.value = text;
+        runWhatIf(text);
+      } else {
+        analyzeScenario(text);
+      }
+    }
   });
 });
+
+// Reset Demo Button
+const btnResetDemo = document.getElementById("btn-reset-demo");
+if (btnResetDemo) {
+  btnResetDemo.addEventListener("click", () => {
+    scenarioInput.value = CANONICAL_SCENARIO;
+    whatIfInput.value = "";
+    // Reset tabs back to Feasible
+    tabFeasible.classList.add("active");
+    tabInfeasible.classList.remove("active");
+    feasiblePlansList.classList.remove("hidden");
+    infeasiblePlansList.classList.add("hidden");
+    // Re-run canonical flow
+    analyzeScenario(CANONICAL_SCENARIO);
+  });
+}
 
 // What-If Chips
 document.querySelectorAll(".what-if-chip").forEach((chip) => {
