@@ -29,19 +29,32 @@ def map_user_priorities_to_weights(
     - All objectives / balanced: equal representation (0.20 each).
     - Default factory baseline if unspecified: delivery 0.35, cost 0.30, quality 0.15, energy 0.10, risk 0.10.
     """
+    ALL_DIMENSIONS = {"delivery", "cost", "quality", "energy", "risk"}
+
+    # If full explicit 5-dimension dictionary is provided by test/API caller
     if isinstance(priorities, dict):
-        d = float(priorities.get("delivery", priorities.get("delivery_weight", 0.35)))
-        c = float(priorities.get("cost", priorities.get("cost_weight", 0.30)))
-        q = float(priorities.get("quality", priorities.get("quality_weight", 0.15)))
-        e = float(priorities.get("energy", priorities.get("energy_weight", 0.10)))
-        r = float(priorities.get("risk", priorities.get("risk_weight", 0.10)))
-        return ObjectiveWeights(
-            delivery_weight=d,
-            cost_weight=c,
-            quality_weight=q,
-            energy_weight=e,
-            risk_weight=r,
-        )
+        keys = {k.replace("_weight", "") for k in priorities.keys()}
+        # If all 5 dimensions are explicitly provided in dict
+        if ALL_DIMENSIONS.issubset(keys):
+            d = float(priorities.get("delivery", priorities.get("delivery_weight", 0.35)))
+            c = float(priorities.get("cost", priorities.get("cost_weight", 0.30)))
+            q = float(priorities.get("quality", priorities.get("quality_weight", 0.15)))
+            e = float(priorities.get("energy", priorities.get("energy_weight", 0.10)))
+            r = float(priorities.get("risk", priorities.get("risk_weight", 0.10)))
+            return ObjectiveWeights(
+                delivery_weight=d,
+                cost_weight=c,
+                quality_weight=q,
+                energy_weight=e,
+                risk_weight=r,
+            )
+        # Otherwise, dict is an intent specification (e.g. from Gemini tool call {'delivery': 0.4, 'cost': 0.6})
+        # Extract intended dimensions deterministically and route to authoritative weights
+        prioritized_dims = [dim for dim in ["delivery", "cost", "quality", "energy", "risk"] if priorities.get(dim, priorities.get(f"{dim}_weight", 0)) > 0]
+        if prioritized_dims:
+            priorities = " ".join(prioritized_dims)
+        else:
+            priorities = None
 
     if isinstance(priorities, list):
         priorities = " ".join(priorities)
@@ -68,11 +81,22 @@ def map_user_priorities_to_weights(
             risk_weight=0.20,
         )
 
-    has_delivery = any(w in text for w in ["delivery", "deadline", "on time", "on-time", "high priority", "protect customer", "delay", "schedule"])
-    has_cost = any(w in text for w in ["cost", "minimize cost", "budget", "cheap", "expense", "economic"])
-    has_quality = any(w in text for w in ["quality", "defect", "inspection", "tolerance", "scrap"])
-    has_energy = any(w in text for w in ["energy", "power", "green", "kwh", "carbon"])
-    has_risk = any(w in text for w in ["risk", "overtime", "avoid overtime", "shift fatigue", "safety"])
+    has_delivery = any(w in text for w in [
+        "delivery", "deliveries", "deliver", "deadline", "on time", "on-time",
+        "high priority", "high-priority", "protect customer", "delay", "schedule", "due date"
+    ])
+    has_cost = any(w in text for w in [
+        "cost", "minimize cost", "minimizing cost", "budget", "cheap", "expense", "economic"
+    ])
+    has_quality = any(w in text for w in [
+        "quality", "defect", "inspection", "tolerance", "scrap"
+    ])
+    has_energy = any(w in text for w in [
+        "energy", "power", "green", "kwh", "carbon"
+    ])
+    has_risk = any(w in text for w in [
+        "risk", "overtime", "avoid overtime", "shift fatigue", "safety"
+    ])
 
     matched = []
     if has_delivery:
@@ -350,7 +374,7 @@ def evaluate_recovery_plans(
     Args:
         machine_id: Machine suffering downtime.
         downtime_hours: Downtime duration in hours.
-        weights: Optional dictionary of weights or natural language priority description.
+        weights: Optional priority description, intent dimensions, or dictionary. Deterministic application logic maps intent to authoritative predefined objective weights.
         start_time: Optional start timestamp.
         
     Returns:

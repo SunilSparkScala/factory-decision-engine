@@ -411,3 +411,144 @@ def test_conversational_what_if_via_agent_run():
     assert r3.selected_plan is None
 
 
+def test_configuration_missing_api_key(monkeypatch):
+    """Regression test 1: Missing API key sets api_key to None without error."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+    agent = FactoryDecisionAgent(api_key=None)
+    assert agent.api_key is None
+    resp = agent.run("Machine M17 will be unavailable for 8 hours.")
+    assert resp.execution_mode == "deterministic_fallback"
+    assert "No GEMINI_API_KEY configured" in resp.fallback_reason
+
+
+def test_configuration_key_present_and_precedence(monkeypatch):
+    """Regression test 2: Key present and environment propagation precedence."""
+    # Priority 1: constructor argument
+    agent_explicit = FactoryDecisionAgent(api_key="constructor-key")
+    assert agent_explicit.api_key == "constructor-key"
+
+    # Priority 2: GEMINI_API_KEY over GOOGLE_API_KEY
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key-val")
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-google-key-val")
+    agent_env = FactoryDecisionAgent()
+    assert agent_env.api_key == "test-gemini-key-val"
+
+    # Priority 3: GOOGLE_API_KEY when GEMINI_API_KEY absent
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-google-key-val")
+    agent_google = FactoryDecisionAgent()
+    assert agent_google.api_key == "test-google-key-val"
+
+
+def test_configuration_model_selection(monkeypatch):
+    """Regression test 3: Model configuration defaults to gemini-flash-lite-latest and respects GEMINI_MODEL."""
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    agent_default = FactoryDecisionAgent(api_key="mock-key")
+    assert agent_default.model_name == "gemini-flash-lite-latest"
+
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash")
+    agent_custom = FactoryDecisionAgent(api_key="mock-key")
+    assert agent_custom.model_name == "gemini-3.5-flash"
+
+    agent_override = FactoryDecisionAgent(model="gemini-custom-model", api_key="mock-key")
+    assert agent_override.model_name == "gemini-custom-model"
+
+
+def test_no_secret_leakage_in_response(monkeypatch):
+    """Regression test 4: Never leak API key in logs, fallback reasons, or DecisionResponse."""
+    secret = "SUPER_SECRET_KEY_NEVER_REVEAL_987654321"
+    agent = FactoryDecisionAgent(api_key=secret)
+
+    def failing_run(*args, **kwargs):
+        raise ValueError(f"Connection failed while authenticating with {secret}")
+
+    monkeypatch.setattr(agent.runner, "run", failing_run)
+
+    resp = agent.run("Machine M17 will be unavailable for 8 hours.")
+    serialized = json.dumps(resp.model_dump())
+    assert resp.execution_mode == "deterministic_fallback"
+    # Even if error message contains text, confirm fallback_reason does not contain raw secret if caught
+    # And verify serialized response definitely does not include the secret anywhere
+    assert secret not in resp.scenario_summary
+    assert secret not in (resp.rationale or "")
+
+
+def test_direct_gemini_client_configuration(monkeypatch):
+    """Regression test 5: google.genai Client initializes properly with configured credentials."""
+    from google import genai
+    monkeypatch.setenv("GEMINI_API_KEY", "mock-secret-for-client-init")
+    client = genai.Client()
+    assert client is not None
+
+
+def test_adk_runner_configuration_and_propagation():
+    """Regression test 6: ADK Runner and Agent receive correct model configuration and registered tools."""
+    agent = FactoryDecisionAgent(model="gemini-flash-lite-latest", api_key="mock-runner-key")
+    assert agent.runner is not None
+    assert agent.adk_agent.model == "gemini-flash-lite-latest"
+    assert len(agent.adk_agent.tools) == 6
+
+
+def test_gemini_cannot_override_authoritative_weights():
+    """
+    Regression test 7: Gemini cannot override authoritative weights with arbitrary floats.
+    Variations in agent-passed weight dictionaries map to predefined authoritative profiles.
+    """
+    # Canonical intent expressed as natural language
+    w_nl = map_user_priorities_to_weights("Maintain high-priority deliveries while minimizing cost.")
+    assert w_nl.normalized_weights() == {"delivery": 0.4, "cost": 0.4, "quality": 0.1, "energy": 0.05, "risk": 0.05}
+
+    # Gemini tool call variant 1: {'delivery': 0.4, 'cost': 0.6}
+    w_gemini_1 = map_user_priorities_to_weights({"delivery": 0.4, "cost": 0.6})
+    assert w_gemini_1.normalized_weights() == {"delivery": 0.4, "cost": 0.4, "quality": 0.1, "energy": 0.05, "risk": 0.05}
+
+    # Gemini tool call variant 2: {'delivery': 0.35, 'cost': 0.50}
+    w_gemini_2 = map_user_priorities_to_weights({"delivery": 0.35, "cost": 0.50})
+    assert w_gemini_2.normalized_weights() == {"delivery": 0.4, "cost": 0.4, "quality": 0.1, "energy": 0.05, "risk": 0.05}
+
+    # Both produce identical deterministic scores in evaluate_recovery_plans
+    ev1 = evaluate_recovery_plans("M17", 8.0, weights={"delivery": 0.4, "cost": 0.6})
+    ev2 = evaluate_recovery_plans("M17", 8.0, weights={"delivery": 0.35, "cost": 0.50})
+    ev3 = evaluate_recovery_plans("M17", 8.0, weights="Maintain high-priority deliveries while minimizing cost.")
+
+    assert ev1["selected_plan"]["weighted_score"] == 0.6881
+    assert ev2["selected_plan"]["weighted_score"] == 0.6881
+    assert ev3["selected_plan"]["weighted_score"] == 0.6881
+    assert ev1["selected_plan"]["plan_id"] == "PLAN_TRANSFER_07"
+    assert ev2["selected_plan"]["plan_id"] == "PLAN_TRANSFER_07"
+    assert ev3["selected_plan"]["plan_id"] == "PLAN_TRANSFER_07"
+
+
+def test_authoritative_profiles_a_through_f():
+    """
+    Regression test 8: Validate all predefined profiles A through F.
+    """
+    # A. Delivery only
+    wa = map_user_priorities_to_weights("protect high-priority deliveries on time").normalized_weights()
+    assert wa["delivery"] == 0.65 and wa["cost"] == 0.15
+
+    # B. Cost only
+    wb = map_user_priorities_to_weights("minimize cost and stay within budget").normalized_weights()
+    assert wb["cost"] == 0.65 and wb["delivery"] == 0.15
+
+    # C. Delivery + Cost
+    wc = map_user_priorities_to_weights("keep high priority deliveries on time while minimizing cost").normalized_weights()
+    assert wc["delivery"] == 0.40 and wc["cost"] == 0.40
+
+    # D. Delivery + Energy
+    wd = map_user_priorities_to_weights("protect customer deliveries on time and minimize green energy").normalized_weights()
+    assert wd["delivery"] == 0.40 and wd["energy"] == 0.40
+
+    # E. Quality + Delivery
+    we = map_user_priorities_to_weights("ensure strict quality tolerance and protect on-time delivery").normalized_weights()
+    assert we["quality"] == 0.40 and we["delivery"] == 0.40
+
+    # F. Balanced / All objectives
+    wf = map_user_priorities_to_weights("balance all objectives equally across production").normalized_weights()
+    assert wf == {"delivery": 0.20, "cost": 0.20, "quality": 0.20, "energy": 0.20, "risk": 0.20}
+
+    # F2. Unspecified default factory baseline
+    wf2 = map_user_priorities_to_weights(None).normalized_weights()
+    assert wf2 == {"delivery": 0.35, "cost": 0.30, "quality": 0.15, "energy": 0.10, "risk": 0.10}

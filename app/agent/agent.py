@@ -40,7 +40,7 @@ class FactoryDecisionAgent:
         model: Optional[str] = None,
         api_key: Optional[str] = None,
     ):
-        self.model_name = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model_name = model or os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         
         # Propagate API key to os.environ so Google ADK and GenAI clients find it
@@ -227,7 +227,7 @@ class FactoryDecisionAgent:
             execution_mode="live_gemini",
             fallback_reason=None,
             clarification_needed=parsed_params.get("clarification_needed"),
-            eval_fn=(lambda *a, **kw: eval_resp) if eval_resp else None,
+            eval_fn=None,
         )
 
         if live_evidence:
