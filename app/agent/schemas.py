@@ -59,6 +59,23 @@ class DecisionResponse(BaseModel):
     human_approval_required: bool = True
     clarification_needed: Optional[str] = None
 
+    # How the operator message was interpreted (Gemini or deterministic rules)
+    scenario_interpretation: Optional[Dict[str, Any]] = None
+    # Policy constraints applied to this run, carried into what-if follow-ups
+    applied_constraints: Dict[str, bool] = Field(default_factory=dict)
+    # Tools the Gemini agent chose to call during the live ADK loop
+    agent_trace: List[Dict[str, Any]] = Field(default_factory=list)
+    # Plan stability across alternative downtime durations
+    robustness: Optional[Dict[str, Any]] = None
+    # Domain specialist agent assessments (war room)
+    specialist_assessments: List[Dict[str, Any]] = Field(default_factory=list)
+    # Structured plain-language recommendation brief for the UI
+    decision_brief: Optional[Dict[str, Any]] = None
+    # Status of each generative component for this response
+    ai_components: Dict[str, str] = Field(default_factory=dict)
+    # Conversational reply to the operator (answers, follow-up acknowledgements, off-topic guidance)
+    assistant_message: Optional[str] = None
+
     def to_markdown_explanation(self) -> str:
         """Render a structured executive briefing matching Phase 4B Decision Intelligence Contract."""
         lines = [

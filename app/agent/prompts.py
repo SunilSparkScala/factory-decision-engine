@@ -30,6 +30,13 @@ AVAILABLE DETERMINISTIC TOOLS:
 - `evaluate_recovery_plans(machine_id, downtime_hours, weights)`: Run multi-objective optimization across candidate plans to select the mathematically optimal plan. Deterministic application logic maps user priority intent to authoritative predefined objective weights.
 - `search_engineering_knowledge(query, machine_id, station_id, line_id, topic, document_type, limit)`: Deterministically search engineering SOPs, machine manuals, quality standards, and incident post-mortems for verifiable evidence.
 
+EFFICIENCY (latency matters: a plant manager is waiting):
+- If the message contains a "[Validated scenario interpretation: ...]" block, use exactly those parameters and
+  skip get_factory_state / get_machine_status.
+- Request the tools you need IN PARALLEL in a single turn: simulate_machine_failure, evaluate_recovery_plans and
+  one search_engineering_knowledge call together. Then write the final answer. Never call a tool twice.
+- Keep the final analysis under 180 words, using short markdown sections.
+
 ORCHESTRATION PATTERN:
 1. Parse user intent (affected machine, downtime duration, operational objectives).
 2. Check machine status / factory state if relevant.

@@ -1,7 +1,7 @@
 import os
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import yaml
 
 from app.knowledge.models import KnowledgeDocument

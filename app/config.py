@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from pydantic import BaseModel
 
@@ -30,6 +31,9 @@ class Config(BaseModel):
     NUM_ORDERS: int = 50
     NUM_MATERIALS: int = 25
     NUM_SUPPLIERS: int = 15
+
+    # Simulated "now" for the synthetic plant (matches the generator's base time)
+    PLANT_CLOCK: datetime = datetime(2026, 10, 1, 8, 0, 0, tzinfo=timezone.utc)
 
     DB_PATH: Path = DB_PATH
     GENERATED_DATA_DIR: Path = GENERATED_DATA_DIR

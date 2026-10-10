@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+.env
+.env.*
+__pycache__
+*.pyc
+.pytest_cache
+tests
+data/generated/*
+credentials*.json
+service_account*.json

@@ -591,6 +591,11 @@ class DecisionOrchestrator:
             risks=risks,
             human_approval_required=True,
             clarification_needed=clarification_needed,
+            applied_constraints={
+                "disallow_overtime": disallow_overtime,
+                "disallow_cross_line_transfer": disallow_cross_line_transfer,
+                "disallow_all_transfers": disallow_all_transfers,
+            },
         )
 
     def what_if(
@@ -618,7 +623,8 @@ class DecisionOrchestrator:
             else (previous_response.impact_summary.get("downtime_hours", 8.0) if previous_response.impact_summary else 8.0)
         )
         priorities = updated_priorities if updated_priorities is not None else previous_response.objective_weights
-        constraints = dict(updated_constraints or {})
+        constraints = dict(previous_response.applied_constraints or {})
+        constraints.update(updated_constraints or {})
 
         # If a follow-up natural-language prompt is provided, parse it
         if follow_up_prompt:
