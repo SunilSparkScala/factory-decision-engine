@@ -15,17 +15,17 @@ function steps({ plantName, onTryIt }) {
     {
       target: () => document.querySelector("#kpi-row .kpi-health"),
       title: "How the plant is doing",
-      body: "Every machine is in exactly one group: running normally, at risk, or stopped. Click a group to see those machines on the plant map.",
-    },
-    {
-      target: card("#alert-list"),
-      title: "Needs action now",
-      body: "Machine faults arrive here automatically (in this demo, the 🧪 button plays the machine). Urgent predictions land here too. “Analyze impact” is your response.",
+      body: "Every machine is in exactly one group: running normally, at risk, or stopped, so the three numbers add up to the total. After the tour, click a group to see those machines on the plant map.",
     },
     {
       target: card("#watch-list"),
       title: "Machine health trends",
-      body: "The early-warning radar: sensor trends heading for an alarm, with a backup plan already built. A machine moves to “Needs action now” once it is predicted to hit the alarm within 36 hours.",
+      body: "The early-warning radar. We watch every machine's sensors, spot the ones heading for an alarm, and build a backup plan in advance. On the right, the big number is the expected time to the alarm and the small range under it is the likely window.",
+    },
+    {
+      target: card("#alert-list"),
+      title: "Needs action now",
+      body: "In a real plant, machines report faults here automatically. In this demo, the 🧪 button pretends to be a machine sending one. Machines predicted to reach an alarm within 36 hours also show up here. Click “Analyze impact” to get a recovery plan.",
     },
     {
       target: () => document.querySelector("#quick-report"),
