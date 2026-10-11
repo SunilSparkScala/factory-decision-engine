@@ -201,6 +201,7 @@ def client(tmp_path, monkeypatch):
     from app.agent import decision_log
     monkeypatch.setattr(decision_log, "LOG_PATH", tmp_path / "decision_log.json")
     monkeypatch.setattr(decision_log, "_entries", None)
+    monkeypatch.delenv("FDE_LOG_BUCKET", raising=False)
     from app.api import app
     return TestClient(app)
 

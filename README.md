@@ -74,13 +74,14 @@ API key and billing through the project. The factory database is generated durin
 gcloud config set project factory-decision-engine-01
 gcloud run deploy factory-decision-engine --source . --region asia-south1 --allow-unauthenticated `
   --memory 1Gi --cpu 1 --timeout 300 --max-instances 3 `
-  --set-env-vars "GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=factory-decision-engine-01,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=gemini-3.5-flash-lite"
+  --set-env-vars "GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=factory-decision-engine-01,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=gemini-3.5-flash-lite,FDE_LOG_BUCKET=factory-decision-engine-01-decision-log"
 ```
 
 One-time project setup: enable `run`, `cloudbuild`, `artifactregistry` and `aiplatform` APIs, and grant
 the default compute service account `roles/run.builder`, `roles/aiplatform.user` and
-`roles/logging.logWriter`. Note: the decision log is stored on the container's disk and resets when
-Cloud Run restarts the service.
+`roles/logging.logWriter`. Approved decisions are kept in a private Cloud Storage bucket
+(`FDE_LOG_BUCKET`), so the audit log survives restarts and is shared by all instances; the service
+account gets `roles/storage.objectUser` on that bucket only. Without the variable the log is a local file.
 
 ## Architecture
 
