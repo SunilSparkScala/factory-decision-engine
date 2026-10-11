@@ -7,9 +7,11 @@ import { state } from "../state.js";
 import {
   STRATEGY, strategyLabel, strategyIcon, planText, usd, num, hours, pct, lineName,
   deliveryLabel, qualityLabel, riskLabel, deliveryRiskTone, stanceInfo, presetForWeights, humanize,
+  machineTypeLabel, stationOperation,
 } from "../format.js";
+import { renderPlantMap } from "../components/plant-map.js";
 
-const CANONICAL_PROMPT = () => $("#step-input .chip-btn[data-example='clear']").dataset.prompt;
+const CANONICAL_PROMPT = () => $("#step-input .example-btn[data-example='clear']").dataset.prompt;
 const STEP_IDS = ["#step-impact", "#step-options", "#step-recommendation", "#step-approve"];
 const AGENT_ICONS = { production: "🏭", quality: "🔍", maintenance: "🔧", energy: "⚡" };
 
@@ -29,8 +31,15 @@ export function init(context) {
       analyze($("#scenario-input").value);
     }
   });
-  for (const chip of $$("#step-input .chip-btn[data-prompt]")) {
-    chip.addEventListener("click", () => analyze(chip.dataset.prompt, { fresh: true }));
+  // Example reports fill the box so the user sees exactly what will be sent; they press Analyze
+  for (const btn of $$("#step-input .example-btn")) {
+    btn.addEventListener("click", () => {
+      prefill(btn.dataset.prompt);
+      const analyzeBtn = $("#btn-analyze");
+      analyzeBtn.classList.remove("pulse");
+      void analyzeBtn.offsetWidth;
+      analyzeBtn.classList.add("pulse");
+    });
   }
   $("#btn-reset-demo").addEventListener("click", resetDemo);
   for (const btn of $$("#priority-presets button")) {
@@ -55,9 +64,13 @@ export function onShow() {}
 /** Use the industry pack's example sentences and start a clean workspace for the new plant. */
 export function applyPack(pack) {
   if (!pack) return;
-  for (const chip of $$("#step-input .chip-btn[data-example]")) {
-    const text = pack.examples[chip.dataset.example];
-    if (text) chip.dataset.prompt = text;
+  for (const btn of $$("#step-input .example-btn")) {
+    const text = pack.examples[btn.dataset.example];
+    if (text) {
+      btn.dataset.prompt = text;
+      btn.querySelector(".ex-text").textContent = `“${text}”`;
+      btn.title = text;
+    }
   }
   $("#scenario-input").placeholder = pack.examples.placeholder;
   $("#scenario-input").value = "";
@@ -175,6 +188,7 @@ function render(decision) {
   $("#btn-approve").disabled = !decision.selected_plan;
   showSteps(true);
   renderImpact(decision);
+  renderImpactMap(decision);
   renderOptions(decision);
   renderRecommendation(decision);
   reportDegradedAi(decision);
@@ -247,8 +261,8 @@ function renderImpact(d) {
       sub ? h("div", { class: "rn-sub" }, sub) : null);
   const arrow = () => h("div", { class: "ripple-arrow", "aria-hidden": "true" }, "→");
   clear($("#ripple-chain"),
-    node("Machine down", chain.machine_id, `${(chain.machine_type || "").replace(/_/g, " ")} · ${hours(imp.downtime_hours)}`, "origin"), arrow(),
-    node("Station", chain.station_name?.replace(/^Station /, "") || chain.station_id, chain.operation_type ? humanize(chain.operation_type) : ""), arrow(),
+    node("Machine down", chain.machine_id, `${machineTypeLabel(chain.machine_type)} · ${hours(imp.downtime_hours)}`, "origin"), arrow(),
+    node("Station", chain.station_id?.replace("STA_", "Station ") || "", stationOperation(chain.station_name)), arrow(),
     node("Line", chain.line_name || lineName(chain.line_id), `${pct((imp.capacity_loss_percentage || 0) / 100, 1)} capacity lost`), arrow(),
     node("Orders", `${imp.affected_order_count} affected`, `${imp.high_priority_affected_count} high-priority`), arrow(),
     node("Delivery risk", humanize(imp.delivery_risk), (imp.affected_product_models || []).join(", "), "end"),
@@ -276,6 +290,48 @@ function renderImpact(d) {
       h("td", {}, h("span", { class: `badge ${o.priority === "HIGH" ? "badge-danger" : o.priority === "MEDIUM" ? "badge-warn" : ""}` }, humanize(o.priority))),
       h("td", {}, new Date(o.due_time).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }))))),
   );
+}
+
+/** Plain-language reason a backup machine can't take over (from the engine's feasibility check). */
+function cantHelpReason(reasons) {
+  const r = (reasons || [])[0] || "";
+  const models = /incompatible with affected order model\(s\): \[(.*?)\]/.exec(r);
+  const line = /Target line (LINE_[A-Z])/.exec(r);
+  if (models && line) return `${lineName(line[1])} doesn't build ${models[1].replace(/'/g, "")}`;
+  if (/unavailable with status/i.test(r)) return "machine is offline";
+  if (/schedule conflicts/i.test(r)) return "already fully booked";
+  return r || "not feasible";
+}
+
+/** "What happens next on the plant floor": the broken machine, who can/can't help, where work moves. */
+async function renderImpactMap(d) {
+  const box = $("#impact-map");
+  const hint = $("#impact-map-card .subcard-hint");
+  try {
+    if (!state.overview) state.overview = await api.overview();
+  } catch {
+    $("#impact-map-card").hidden = true;
+    return;
+  }
+  if (state.decision !== d) return;
+  $("#impact-map-card").hidden = false;
+  const failed = d.impact_summary.machine_id;
+  const candidates = {};
+  for (const p of d.candidate_plans) {
+    if (p.strategy_type !== "MACHINE_TRANSFER" || !p.target_machine_id) continue;
+    candidates[p.target_machine_id] = p.is_feasible
+      ? { ok: true, note: `can take over · extra cost ${usd(p.cost_impact_usd)}` }
+      : { ok: false, note: cantHelpReason(p.infeasibility_reasons) };
+  }
+  const sp = d.selected_plan;
+  const target = sp?.strategy_type === "MACHINE_TRANSFER" ? sp.target_machine_id : null;
+  hint.textContent = target
+    ? `${failed} is down. ✓ marks machines that can take over its work, ✕ those that can't (hover for why). The arrow shows the recommended move to ${target}.`
+    : `${failed} is down. The recommended plan keeps the work where it is: ${planText(sp, failed)}.`;
+  renderPlantMap(box, {
+    lines: state.overview.lines,
+    overlay: { failed, target, candidates },
+  });
 }
 
 // ------------------------------------------------------------------ step 3: options

@@ -19,10 +19,10 @@ flags any number the AI writes that does not appear in the engine's data or the 
 | **Understands messy reports** | Gemini turns "the Unit 2 welder at B2 is down, maybe 6–10 h, keep it cheap, no overtime" into a validated scenario. If the machine is ambiguous, it asks which one instead of guessing. |
 | **Simulates the ripple effect** | Machine → station → line → affected orders → delivery risk, from the plant data. |
 | **Generates and ranks options** | Move work, reorder the queue, or overtime, each checked against hard constraints and scored on delivery, cost, quality, energy and risk. Changing priorities re-ranks instantly. |
-| **Tool-calling decision agent** | A Google ADK agent calls the simulation, optimization and knowledge tools itself; its tool trace is shown in the UI. |
-| **Specialist war room** | Production, Quality, Maintenance and Energy agents (ADK `ParallelAgent`) review the plan, then a Decision Lead (`SequentialAgent`) writes the brief. Citations are validated against retrieved documents. |
+| **Tool-calling agent in Ask** | Open questions ("what if M26 also breaks?") go to a Google ADK agent that runs new simulations, evaluations and knowledge searches itself; its tool trace is shown under the answer. |
+| **Specialist war room** | Production, Quality, Maintenance and Energy agents review the plan in parallel, then a Decision Lead writes the brief and maps how their concerns connect. Any objection is surfaced before approval. Citations are validated against retrieved documents. |
 | **Robust to uncertain repairs** | Re-runs the decision for 1–48 h of downtime and shows where the plan holds and where another option wins. |
-| **Predicts before it breaks** | A trend model on vibration, temperature and health flags machines heading for an alarm (including ones whose status still says "healthy") and pre-builds a backup plan. |
+| **Predicts before it breaks** | A trend model on vibration, temperature and health flags machines heading for an alarm (including ones whose status still says "healthy") and pre-builds a backup plan. The Control Room shows machine health, delivery pressure and a plant map of where the trouble is. |
 | **Ask about the decision** | "Why not overtime?" or "Explain this to my director": grounded answers with citations. |
 | **Closes the loop** | Approval records an audit entry and drafts the supervisor work order, quality notice, schedule changes and customer update. Nothing is executed automatically. |
 
@@ -58,7 +58,7 @@ Run the tests with `python -m pytest` (Gemini is mocked; no key or network neede
 
 ### Gemini quotas
 
-Each analysis uses roughly 10–14 model calls (understanding, tool loop, 4 specialists plus a lead). On the
+Each analysis uses about 6 model calls (understanding, 4 specialists plus a lead); an agentic Ask question adds a few more. On the
 **free tier**, Flash-Lite models allow about 15 requests per minute and the larger Flash models only about
 20 per day. The app spreads roles across models, skips any model that is cooling down after a quota error,
 caches identical repeat requests for 15 minutes, and falls back to rule-based results instead of failing.
@@ -92,9 +92,9 @@ Browser (vanilla JS, no build)          FastAPI (app/api.py)
                                                      │
                                       FactoryDecisionAgent (app/agent/agent.py)
      ┌──────────────────────────────┬──────────────┴───────────────┬───────────────────────────┐
- Understanding (Gemini,       Deterministic engine           ADK tool-calling agent      ADK specialist war room
+ Understanding (Gemini,       Deterministic engine           ADK tool-calling agent      Specialist war room
  structured output,           simulation → recovery plans →  (simulate, evaluate,        Production ‖ Quality ‖
- validated vs registry)       feasibility → scoring →        knowledge search)           Maintenance ‖ Energy → Lead
+ validated vs registry)       feasibility → scoring →        knowledge search; Ask)      Maintenance ‖ Energy → Lead
  app/agent/understanding.py   evidence (app/simulation,      app/agent/tools.py          app/agent/specialists.py
                               recovery, evaluation)
                                      │
@@ -116,7 +116,7 @@ Browser (vanilla JS, no build)          FastAPI (app/api.py)
 
 - The plants, their orders, telemetry and documents are **synthetic** (Northwind Electronics Plant 1
   and Apex Automotive Plant 1); names are fictional.
-- Fault events are scripted ("Simulate incoming fault"); in production they would stream from MES/PLC
+- Fault events are scripted ("Demo: simulate a machine fault"); in production they would stream from MES/PLC
   systems (e.g. Pub/Sub). The early-warning model is a transparent trend extrapolation, not a trained model.
 - The simulation simplifies some realities (for example, it does not model labour skills).
   Assumptions are listed with every decision.

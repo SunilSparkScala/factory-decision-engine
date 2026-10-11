@@ -72,21 +72,29 @@
           <h1 id="control-title">Control Room</h1>
           <p class="view-sub" id="plant-name">Live plant status, incoming alerts and early warnings.</p>
         </div>
-        <button class="btn btn-ghost" id="btn-new-scenario">+ Describe a disruption</button>
+        <button class="btn btn-ghost btn-sm" id="btn-about-data" aria-haspopup="dialog">ⓘ About this demo data</button>
       </div>
 
+      <!-- Report a disruption: the app's main action, available the moment it opens -->
+      <form class="quick-report" id="quick-report" autocomplete="off">
+        <label for="quick-report-input" class="quick-report-label"><span aria-hidden="true">⚡</span> Report a disruption</label>
+        <input id="quick-report-input" type="text" placeholder="What happened? e.g. “M17 is down for about 6 hours, protect high-priority orders”">
+        <button type="submit" class="btn btn-primary">Analyze →</button>
+      </form>
+
       <div class="kpi-row" id="kpi-row">
-        <div class="kpi skeleton"></div><div class="kpi skeleton"></div><div class="kpi skeleton"></div><div class="kpi skeleton"></div><div class="kpi skeleton"></div>
+        <div class="kpi skeleton"></div><div class="kpi skeleton"></div>
       </div>
 
       <div class="grid-2">
         <section class="card" aria-labelledby="alerts-title">
           <div class="card-head">
             <div>
-              <h2 id="alerts-title">Alert inbox</h2>
-              <p class="card-sub">Machine faults and predicted failures. Open one to get a ready plan.</p>
+              <h2 id="alerts-title">Needs action now</h2>
+              <p class="card-sub">Machine faults and urgent predictions. Open one to get a ready plan.</p>
             </div>
-            <button class="btn btn-secondary btn-sm" id="btn-simulate-fault" title="Simulate a fault event arriving from the shop floor">Simulate incoming fault</button>
+            <button class="btn btn-demo btn-sm" id="btn-simulate-fault"
+              title="In production, faults arrive automatically from machine controllers (PLC/MES, e.g. via Pub/Sub). This button simulates one.">🧪 Demo: simulate a machine fault</button>
           </div>
           <div id="alert-list" class="alert-list" aria-live="polite">
             <div class="skeleton-block"></div>
@@ -96,8 +104,9 @@
         <section class="card" aria-labelledby="watch-title">
           <div class="card-head">
             <div>
-              <h2 id="watch-title">Early-warning watch list</h2>
-              <p class="card-sub">Trend model on vibration, temperature and health. Backup plans are pre-built.</p>
+              <h2 id="watch-title">Machine health trends</h2>
+              <p class="card-sub">Machines whose sensor trends point toward an alarm. Plan ahead: backup plans are pre-built.</p>
+              <p class="card-note">A machine is promoted to “Needs action now” when it is predicted to reach an alarm within 36 hours.</p>
             </div>
           </div>
           <div id="watch-list" class="watch-list">
@@ -109,18 +118,16 @@
       <section class="card" aria-labelledby="lines-title">
         <div class="card-head">
           <div>
-            <h2 id="lines-title">Production lines</h2>
-            <p class="card-sub">Each dot is a machine. Click one to analyze what happens if it goes down.</p>
+            <h2 id="lines-title">Where’s the trouble?</h2>
+            <p class="card-sub">Each line, its stations in production order. Healthy stations stay quiet; only problems are marked. Click a machine to ask “what if it goes down?”</p>
           </div>
           <div class="legend" aria-hidden="true">
-            <span><i class="dot dot-healthy"></i>Healthy</span>
-            <span><i class="dot dot-degraded"></i>Degraded</span>
-            <span><i class="dot dot-maintenance"></i>Maintenance</span>
-            <span><i class="dot dot-down"></i>Down</span>
-            <span><i class="dot dot-risk"></i>At risk</span>
+            <span>⚠ at risk / degraded</span>
+            <span>🔧 maintenance</span>
+            <span>✕ down</span>
           </div>
         </div>
-        <div id="line-map" class="line-map"></div>
+        <div id="line-map" class="plant-map"></div>
       </section>
     </section>
 
@@ -136,7 +143,8 @@
       <ol class="flow">
         <!-- STEP 1 -->
         <li class="flow-step card" id="step-input">
-          <div class="step-head"><span class="step-num">1</span><h2>What happened?</h2></div>
+          <div class="step-head"><span class="step-num">1</span><h2>What happened?</h2>
+            <button type="button" class="link-btn" id="btn-reset-demo" title="Restore the canonical demo scenario">↺ Reset Demo</button></div>
           <form id="scenario-form" class="scenario-form" autocomplete="off">
             <label for="scenario-input" class="sr-only">Describe the disruption</label>
             <textarea id="scenario-input" rows="2" placeholder="e.g. The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap, no overtime."></textarea>
@@ -145,12 +153,14 @@
               <span class="spinner" aria-hidden="true"></span>
             </button>
           </form>
-          <div class="chips" role="group" aria-label="Example scenarios">
-            <span class="chips-label">Try:</span>
-            <button class="chip-btn" data-example="clear" data-prompt="M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.">M17 down 8 h · protect deliveries, low cost</button>
-            <button class="chip-btn" data-example="plain" data-prompt="The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap and no overtime please.">Plain language · 6–10 h · no overtime</button>
-            <button class="chip-btn" data-example="vague" data-prompt="The welding robot on line B jammed, probably out till lunch. Don't let customer orders slip.">Vague report · needs clarification</button>
-            <button class="chip-btn btn-reset" id="btn-reset-demo" title="Restore the canonical demo scenario">↺ Reset Demo</button>
+          <div class="examples" role="group" aria-labelledby="examples-label">
+            <span class="examples-label" id="examples-label">Example reports, click one to put it in the box:</span>
+            <button type="button" class="example-btn" data-example="clear" data-prompt="M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.">
+              <span class="ex-text"></span><span class="ex-tag">clear report</span></button>
+            <button type="button" class="example-btn" data-example="plain" data-prompt="The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap and no overtime please.">
+              <span class="ex-text"></span><span class="ex-tag">everyday language</span></button>
+            <button type="button" class="example-btn" data-example="vague" data-prompt="The welding robot on line B jammed, probably out till lunch. Don't let customer orders slip.">
+              <span class="ex-text"></span><span class="ex-tag">missing detail → AI asks</span></button>
           </div>
 
           <div id="progress" class="progress" hidden aria-live="polite" title="Stage timing is estimated; the result appears when all stages finish.">
@@ -181,6 +191,13 @@
           <div class="step-head"><span class="step-num">2</span><h2>Impact</h2><span class="step-hint" id="impact-scenario"></span></div>
           <div class="ripple" id="ripple-chain" aria-label="How the disruption ripples through the plant"></div>
           <div class="impact-grid" id="impact-cards"></div>
+          <div class="subcard" id="impact-map-card">
+            <div class="subcard-head">
+              <h4>What happens next on the plant floor</h4>
+              <span class="subcard-hint">The broken machine, which machines can or can’t take over its work, and where the recommended plan moves it.</span>
+            </div>
+            <div id="impact-map" class="plant-map"></div>
+          </div>
           <details class="disclosure">
             <summary>Affected orders</summary>
             <div class="table-wrap"><table class="data-table" id="orders-table"></table></div>
@@ -364,6 +381,17 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- About this demo data -->
+  <div class="modal-backdrop" id="about-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="about-title">
+      <div class="modal-head">
+        <h2 id="about-title">About this demo data</h2>
+        <button class="icon-btn" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="about-body"></div>
     </div>
   </div>
 

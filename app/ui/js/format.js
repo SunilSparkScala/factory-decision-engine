@@ -138,3 +138,23 @@ export function presetForWeights(w) {
   for (const k of ["delivery", "cost", "risk", "energy"]) if (v(k) >= 0.59) return k;
   return null;
 }
+
+/** Operation display names of the active industry pack, e.g. PICK_AND_PLACE -> "Pick-and-place". */
+let operationNames = {};
+export function setOperationNames(pack) {
+  operationNames = Object.fromEntries((pack?.operations || []).map((o) => [o.code, o.display]));
+}
+
+/** "PICK_AND_PLACE_Unit_2" -> "Pick-and-place Unit 2" */
+export function machineTypeLabel(type) {
+  if (!type) return "";
+  const [op, unit] = type.split("_Unit_");
+  const name = operationNames[op] || humanize(op);
+  return unit ? `${name} Unit ${unit}` : name;
+}
+
+/** "Station B2 - Pick-and-place" -> "Pick-and-place" */
+export function stationOperation(stationName) {
+  const parts = String(stationName || "").split(" - ");
+  return parts.length > 1 ? parts.slice(1).join(" - ") : stationName;
+}

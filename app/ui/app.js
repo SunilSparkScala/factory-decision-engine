@@ -5,7 +5,7 @@
 import { $, $$, toast } from "./js/dom.js";
 import { api, getDomain, setDomain } from "./js/api.js";
 import { state } from "./js/state.js";
-import { plantTime } from "./js/format.js";
+import { plantTime, setOperationNames } from "./js/format.js";
 import * as controlRoom from "./js/views/control-room.js";
 import * as workspace from "./js/views/workspace.js";
 import * as decisionLog from "./js/views/decision-log.js";
@@ -91,10 +91,14 @@ async function initDomains() {
       return opt;
     }));
     select.value = chosen;
-    workspace.applyPack(domains.find((d) => d.key === chosen));
+    state.pack = domains.find((d) => d.key === chosen);
+    setOperationNames(state.pack);
+    workspace.applyPack(state.pack);
     select.addEventListener("change", async () => {
       setDomain(select.value);
       const pack = state.domains.find((d) => d.key === select.value);
+      state.pack = pack;
+      setOperationNames(pack);
       workspace.applyPack(pack);
       await controlRoom.reload();
       toast(`Switched to ${pack.plant.name} (${pack.label})`);
