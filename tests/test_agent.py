@@ -244,125 +244,84 @@ def test_fallback_mode_provenance_when_no_api_key(monkeypatch):
     assert resp.human_approval_required is True
 
 def test_fallback_when_live_adk_runner_fails(monkeypatch):
-    """Verify FactoryDecisionAgent falls back safely with documented reason if live runner execution fails."""
+    """
+    The ADK tool-calling agent now answers questions (Ask). If its runner fails, Ask degrades
+    to a grounded fallback answer and the decision itself is unaffected.
+    """
     agent = FactoryDecisionAgent(api_key="mock-key-for-failure-test")
+    decision = agent.run("M17 will be unavailable for 8 hours. Minimize cost.")
+    assert decision.selected_plan is not None
+    assert decision.human_approval_required is True
 
     def failing_run(*args, **kwargs):
         raise RuntimeError("Quota exceeded (429 RESOURCE_EXHAUSTED)")
 
     monkeypatch.setattr(agent.runner, "run", failing_run)
 
-    resp = agent.run("M17 will be unavailable for 8 hours. Minimize cost.")
-    assert resp.execution_mode == "deterministic_fallback"
-    assert resp.fallback_reason is not None
-    assert "Live Gemini ADK execution failed" in resp.fallback_reason
-    assert "Quota exceeded" in resp.fallback_reason
-    assert resp.selected_plan is not None
-    assert resp.human_approval_required is True
+    answer = agent.ask("Why not use overtime?", decision)
+    assert answer["source"] != "agent"
+    assert answer["answer"]
+    assert "Quota exceeded" not in answer["answer"]
 
 def test_offline_mock_adk_tool_loop(monkeypatch):
     """
-    Demonstrate offline Gemini/ADK tool loop:
-    Gemini tool call -> Python tool -> tool result -> final response
-    without requiring a real API key.
+    Demonstrate the offline Gemini/ADK tool loop behind Ask:
+    question -> Gemini tool calls -> deterministic Python tools -> tool results -> grounded answer.
+    The agent runs a NEW simulation (M26 failing) that the original decision never computed.
     """
     from google.adk.events import Event
     from google.genai import types
 
     agent = FactoryDecisionAgent(api_key="mock-test-key")
+    decision = agent.run("M17 will be unavailable for 8 hours. Keep high priority deliveries on time while minimizing cost.")
+
+    sim_data = simulate_machine_failure("M26", 8.0)
+    eval_data = evaluate_recovery_plans("M26", 8.0, weights="delivery cost")
+    kb_data = search_engineering_knowledge(query="quality inspection machine transfer", topic="quality")
+    doc_id = kb_data["evidence"][0]["document_id"]
+    final_text = (
+        f"If M26 also fails for 8 hours, it loses {sim_data['capacity_loss_units']} units "
+        f"({sim_data['affected_order_count']} orders affected). The best response would be "
+        f"{eval_data['selected_plan']['plan_id']} at ${eval_data['selected_plan']['cost_impact_usd']:.0f}. "
+        f"Inspection rules in {doc_id} still apply to any transfer."
+    )
 
     def mock_adk_event_generator(*args, **kwargs):
-        # 1. Gemini requests simulate_machine_failure
-        yield Event(message=types.Content(
-            role="model",
-            parts=[types.Part(function_call=types.FunctionCall(
-                name="simulate_machine_failure",
-                args={"machine_id": "M17", "downtime_hours": 8.0},
-            ))],
-        ))
-        # 2. ADK receives Python tool response
-        sim_data = simulate_machine_failure("M17", 8.0)
-        yield Event(content=types.Content(
-            role="user",
-            parts=[types.Part(function_response=types.FunctionResponse(
-                name="simulate_machine_failure",
-                response={"result": sim_data},
-            ))],
-        ))
-        # 3. Gemini requests evaluate_recovery_plans
-        yield Event(message=types.Content(
-            role="model",
-            parts=[types.Part(function_call=types.FunctionCall(
-                name="evaluate_recovery_plans",
-                args={"machine_id": "M17", "downtime_hours": 8.0, "weights": "keep high priority deliveries on time while minimizing cost"},
-            ))],
-        ))
-        # 4. ADK receives Python tool response
-        eval_data = evaluate_recovery_plans("M17", 8.0, weights="keep high priority deliveries on time while minimizing cost")
-        yield Event(content=types.Content(
-            role="user",
-            parts=[types.Part(function_response=types.FunctionResponse(
-                name="evaluate_recovery_plans",
-                response={"result": eval_data},
-            ))],
-        ))
-        # 5. Gemini requests search_engineering_knowledge
-        yield Event(message=types.Content(
-            role="model",
-            parts=[types.Part(function_call=types.FunctionCall(
-                name="search_engineering_knowledge",
-                args={"machine_id": "M17", "topic": "quality"},
-            ))],
-        ))
-        # 6. ADK receives Python tool response
-        kb_data = search_engineering_knowledge(machine_id="M17", topic="quality")
-        yield Event(content=types.Content(
-            role="user",
-            parts=[types.Part(function_response=types.FunctionResponse(
-                name="search_engineering_knowledge",
-                response={"result": kb_data},
-            ))],
-        ))
-        # 7. Gemini produces final response text based on the tool results
-        yield Event(message=types.Content(
-            role="model",
-            parts=[types.Part(text="Based on deterministic simulation and evaluation, transferring M17 workload to M26 satisfies customer due dates while adhering to quality standards.")],
-        ))
+        yield Event(message=types.Content(role="model", parts=[
+            types.Part(function_call=types.FunctionCall(name="simulate_machine_failure", args={"machine_id": "M26", "downtime_hours": 8.0})),
+            types.Part(function_call=types.FunctionCall(name="evaluate_recovery_plans", args={"machine_id": "M26", "downtime_hours": 8.0, "weights": "delivery cost"})),
+            types.Part(function_call=types.FunctionCall(name="search_engineering_knowledge", args={"query": "quality inspection machine transfer", "topic": "quality"})),
+        ]))
+        yield Event(content=types.Content(role="user", parts=[
+            types.Part(function_response=types.FunctionResponse(name="simulate_machine_failure", response={"result": sim_data})),
+            types.Part(function_response=types.FunctionResponse(name="evaluate_recovery_plans", response={"result": eval_data})),
+            types.Part(function_response=types.FunctionResponse(name="search_engineering_knowledge", response={"result": kb_data})),
+        ]))
+        yield Event(message=types.Content(role="model", parts=[types.Part(text=final_text)]))
 
     monkeypatch.setattr(agent.runner, "run", mock_adk_event_generator)
 
-    resp = agent.run("M17 will be unavailable for 8 hours. Keep high priority deliveries on time while minimizing cost.")
+    answer = agent.ask("What if M26 also breaks?", decision)
 
-    # Verify execution provenance
-    assert resp.execution_mode == "live_gemini"
-    assert resp.fallback_reason is None
-
-    # Verify deterministic numerical authority preserved
-    assert resp.selected_plan is not None
-    assert resp.selected_plan.weighted_score is not None
-    assert resp.selected_plan.cost_impact_usd is not None
-    assert resp.selected_plan.delivery_delay_score is not None
-
-    # Verify impact and candidate plans
-    assert resp.impact_summary["machine_id"] == "M17"
-    assert resp.impact_summary["downtime_hours"] == 8.0
-    assert len(resp.candidate_plans) > 0
-
-    # Verify engineering evidence retrieved and preserved
-    assert len(resp.engineering_evidence) > 0
-    assert any("KB-" in e.document_id for e in resp.engineering_evidence)
-
-    # Verify model rationale was captured
-    assert "transferring M17 workload" in resp.rationale
-    assert resp.human_approval_required is True
+    # Agentic provenance: the agent chose and ran the deterministic tools itself
+    assert answer["source"] == "agent"
+    assert [t["tool"] for t in answer["tools_used"]] == [
+        "simulate_machine_failure", "evaluate_recovery_plans", "search_engineering_knowledge",
+    ]
+    # Numerical authority stays in Python: every figure in the answer comes from tool results
+    assert answer["grounding_check"]["passed"] is True
+    assert doc_id in answer["citations"]
+    assert "M26" in answer["answer"]
+    # Asking never mutates the decision itself
+    assert decision.selected_plan.plan_id == "PLAN_TRANSFER_07"
+    assert decision.human_approval_required is True
 
 @pytest.mark.integration
 @pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="Requires live GEMINI_API_KEY credential")
 def test_live_gemini_tool_loop():
     """
-    Live integration test against Google Gemini API and Google ADK Runner.
-    Verifies that the live agent starts, invokes at least one Python tool, receives tool results,
-    and returns a structured DecisionResponse.
+    Live integration test against Google Gemini and the ADK Runner: the decision pipeline returns a
+    structured DecisionResponse, and Ask lets the agent run its own tool calls for a new question.
     """
     agent = FactoryDecisionAgent()
     resp = agent.run("M17 will be unavailable for 8 hours. Keep high priority deliveries on time while minimizing cost.")
@@ -374,7 +333,10 @@ def test_live_gemini_tool_loop():
     assert resp.impact_summary["downtime_hours"] == 8.0
     assert resp.human_approval_required is True
     assert len(resp.candidate_plans) > 0
-    assert len(resp.rationale) > 0
+
+    answer = agent.ask("What if M26 also fails for 8 hours?", resp)
+    assert answer["answer"]
+    assert answer["source"] in ("agent", "gemini")
 
 
 def test_conversational_what_if_via_agent_run():
@@ -457,7 +419,7 @@ def test_configuration_model_selection(monkeypatch):
 
 
 def test_no_secret_leakage_in_response(monkeypatch):
-    """Regression test 4: Never leak API key in logs, fallback reasons, or DecisionResponse."""
+    """Regression test 4: Never leak API key in logs, fallback reasons, DecisionResponse or Ask answers."""
     secret = "SUPER_SECRET_KEY_NEVER_REVEAL_987654321"
     agent = FactoryDecisionAgent(api_key=secret)
 
@@ -469,10 +431,10 @@ def test_no_secret_leakage_in_response(monkeypatch):
     resp = agent.run("Machine M17 will be unavailable for 8 hours.")
     serialized = json.dumps(resp.model_dump())
     assert resp.execution_mode == "deterministic_fallback"
-    # Even if error message contains text, confirm fallback_reason does not contain raw secret if caught
-    # And verify serialized response definitely does not include the secret anywhere
-    assert secret not in resp.scenario_summary
-    assert secret not in (resp.rationale or "")
+    assert secret not in serialized
+
+    answer = agent.ask("What if M26 also fails?", resp)
+    assert secret not in json.dumps(answer)
 
 
 def test_direct_gemini_client_configuration(monkeypatch):

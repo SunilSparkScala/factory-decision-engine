@@ -182,7 +182,7 @@ def test_live_pipeline_attaches_war_room_and_interpretation(monkeypatch):
 
     res = agent.run(CANONICAL)
     assert res.execution_mode == "live_gemini"
-    assert res.ai_components == {"understanding": "gemini", "agent_loop": "gemini", "war_room": "gemini"}
+    assert res.ai_components == {"understanding": "gemini", "war_room": "gemini"}
     assert res.specialist_assessments == assessments
     assert res.decision_brief["headline"] == "Move work to M26"
     assert res.robustness["downtime_range"] == [6.0, 10.0]
@@ -250,3 +250,56 @@ def test_api_approve_rejects_decision_without_plan(client):
     decision = client.post("/api/analyze", json={"prompt": "something broke"}).json()
     res = client.post("/api/approve", json={"decision": decision, "approver": "X"})
     assert res.status_code == 400
+
+
+# ---------------------------------------------------------------- batch 1: honesty fixes
+
+def test_robustness_summary_reports_every_range():
+    """#14: a plan that wins, loses, then wins again must be described as separate ranges."""
+    orch = DecisionOrchestrator()
+    base = orch.orchestrate("M17", 8.0, "balanced all objectives")
+    rb = analyze_robustness(orch, "M17", 8.0, "balanced all objectives", base.applied_constraints,
+                            base.selected_plan.plan_id)
+    rec_segments = [s for s in rb["segments"] if s["is_recommended"]]
+    assert len(rb["best_ranges"]) == len(rec_segments)
+    if len(rb["best_ranges"]) > 1:
+        # Each range is named, so the summary can't claim one continuous span
+        for lo, hi in rb["best_ranges"]:
+            assert (f"{lo:g} h" in rb["summary"]) or (f"{lo:g}–{hi:g} h" in rb["summary"])
+    alt = [s for s in rb["segments"] if not s["is_recommended"] and s["plan_id"]]
+    if alt:
+        assert "is better" in rb["summary"]
+
+
+def test_war_room_objections_and_dependencies(monkeypatch):
+    """#13: objections come from stances (not wording); dependency links are validated."""
+    import app.agent.specialists as sp
+
+    def fake_engine(model, context_json, evidence):
+        view = lambda stance, concern: {"stance": stance, "headline": f"{stance} view", "assessment": "ok",
+                                         "key_concern": concern, "citations": []}
+        return {
+            "production_view": view("support", None),
+            "quality_view": view("caution", "First-part inspection required."),
+            "maintenance_view": view("oppose", "M26 is due for service; do not load it."),
+            "energy_view": view("support", None),
+            "decision_brief": {
+                "headline": "Review M26 before moving work", "summary": "Maintenance objects.",
+                "why": ["a"], "watch_outs": ["b"], "specialist_consensus": "x", "next_steps": ["c"],
+                "dependencies": [
+                    {"from_agent": "quality", "to_agent": "production", "note": "Inspection slows the first run."},
+                    {"from_agent": "energy", "to_agent": "energy", "note": "self-link must be dropped"},
+                ],
+                "conflicts": ["Maintenance opposes while Production supports."],
+            },
+        }
+
+    monkeypatch.setattr(sp, "_run_parallel", fake_engine)
+    decision = DecisionOrchestrator().orchestrate("M17", 8.0, "delivery cost")
+    assessments, brief = sp.run_war_room(decision, None, "test-model")
+
+    assert brief["objections"] == [{"agent": "maintenance", "title": "Maintenance",
+                                    "reason": "M26 is due for service; do not load it."}]
+    assert [(d["from_agent"], d["to_agent"]) for d in brief["dependencies"]] == [("quality", "production")]
+    assert brief["conflicts"] == ["Maintenance opposes while Production supports."]
+    assert brief["specialist_consensus"] == "4 specialists reviewed: 2 support, 1 support with conditions, 1 oppose."

@@ -107,7 +107,8 @@ function startProgress() {
   const steps = $$(".progress-step", box);
   steps.forEach((s) => s.classList.remove("active", "done"));
   const live = state.health?.live_gemini_available;
-  const schedule = live ? [0, 1600, 3200, 6000] : [0, 300, 600, 900];
+  // Estimated timings: the server reports only the final result, so stages advance on a timer
+  const schedule = live ? [0, 2000, 3000] : [0, 300, 600];
   progressTimers.forEach(clearTimeout);
   progressTimers = schedule.map((ms, i) => setTimeout(() => {
     steps.forEach((s, j) => {
@@ -344,16 +345,37 @@ async function rerank(priorities) {
   try {
     const before = state.decision.selected_plan?.plan_id;
     const res = await api.rerank(state.decision, priorities);
+    // Re-ranking is instant and deterministic; the specialists then re-review automatically
+    const reReview = Boolean(state.health?.live_gemini_available && res.selected_plan);
+    if (reReview) res.ai_components = { ...res.ai_components, war_room: "reviewing" };
     render(res);
     const after = res.selected_plan?.plan_id;
     toast(before === after
       ? "Same plan is still best under these priorities."
       : `New recommendation: ${planText(res.selected_plan, res.impact_summary.machine_id)}`);
+    if (reReview) autoReview(res);
   } catch (e) {
     toast(`Re-ranking failed: ${e.message}`, { error: true });
   } finally {
     seg.classList.remove("busy");
     busy = false;
+  }
+}
+
+/** Run the specialist review for a decision; ignore the result if the user has moved on. */
+async function autoReview(decision) {
+  try {
+    const reviewed = await api.review(decision);
+    if (state.decision !== decision) return;
+    state.decision = reviewed;
+    renderRecommendation(reviewed);
+    if (reviewed.ai_components?.war_room === "failed") {
+      toast("Specialists are busy right now. The engine's numbers are complete; you can retry the review.");
+    }
+  } catch (err) {
+    if (state.decision !== decision) return;
+    decision.ai_components = { ...decision.ai_components, war_room: "failed" };
+    renderWarRoom(decision);
   }
 }
 
@@ -372,6 +394,7 @@ function renderRecommendation(d) {
     return;
   }
 
+  renderObjections(d);
   $("#rec-title").textContent = brief?.headline || planText(sp, machine);
   $("#rec-summary").textContent = brief?.summary
     || `${planText(sp, machine)}. Chosen by the optimizer as the best balance of delivery, cost, quality, energy and risk under your priorities.`;
@@ -413,6 +436,24 @@ function renderRecommendation(d) {
   renderDetails(d);
 }
 
+/** Specialists who oppose the plan, decided by their own stance (not by the lead's wording). */
+function objectionsOf(d) {
+  return (d.specialist_assessments || [])
+    .filter((a) => a.stance === "oppose")
+    .map((a) => ({ agent: a.agent, title: a.title, reason: a.key_concern || a.headline || "" }));
+}
+
+function renderObjections(d) {
+  const box = $("#rec-objections");
+  const objections = objectionsOf(d);
+  if (!objections.length) { box.hidden = true; clear(box); return; }
+  clear(box,
+    h("div", { class: "callout-title" },
+      `⚠ ${objections.map((o) => o.title).join(" and ")} ${objections.length > 1 ? "oppose" : "opposes"} this plan. Review before approving.`),
+    objections.map((o) => h("div", {}, h("strong", {}, `${o.title}: `), o.reason)));
+  box.hidden = false;
+}
+
 function fallbackWhy(d) {
   const sp = d.selected_plan;
   const imp = d.impact_summary;
@@ -435,11 +476,13 @@ function renderRobustness(d) {
     const end = next ? next.from_hours : maxH;
     const cls = !s.plan_id ? "none" : s.is_recommended ? "rec" : "alt";
     const label = !s.plan_id ? "No feasible plan" : s.is_recommended ? `This plan` : strategyLabel(s.strategy);
+    const widthPct = ((end - start) / maxH) * 100;
+    const range = s.from_hours === s.to_hours ? `${s.from_hours} h` : `${s.from_hours}–${s.to_hours} h`;
     return h("div", {
       class: `robust-seg ${cls}`,
-      style: `width:${((end - start) / maxH) * 100}%`,
-      title: `${s.from_hours}–${next ? next.from_hours : s.to_hours} h: ${s.description || "no feasible plan"}`,
-    }, label);
+      style: `width:${widthPct}%`,
+      title: `${range}: ${label} (${s.description || "no feasible plan"})`,
+    }, widthPct >= 9 ? label : "");
   });
   const bar = h("div", { class: "robust-bar", role: "img", "aria-label": rb.summary }, segs);
   const wrap = h("div", { class: "robust-wrap" }, bar);
@@ -460,11 +503,18 @@ function renderWarRoom(d) {
   const box = $("#warroom");
   const status = d.ai_components?.war_room;
   const consensus = $("#warroom-consensus");
+  if (status === "reviewing") {
+    consensus.textContent = "Four AI specialists review the plan from their domain.";
+    clear(box, h("div", { class: "warroom-placeholder" },
+      h("span", { class: "reviewing" }, h("span", { class: "spinner inline", "aria-hidden": "true" }),
+        "Specialists are re-reviewing the plan for your new priorities…")));
+    return;
+  }
   if (d.specialist_assessments?.length) {
     consensus.textContent = d.decision_brief?.specialist_consensus || "Four AI specialists reviewed the plan.";
-    clear(box, d.specialist_assessments.map((a) => {
+    const cards = d.specialist_assessments.map((a) => {
       const stance = stanceInfo(a.stance);
-      return h("article", { class: `agent-card agent-${a.agent}` },
+      return h("article", { class: `agent-card agent-${a.agent}${a.stance === "oppose" ? " opposes" : ""}` },
         h("div", { class: "agent-head" },
           h("span", { class: "agent-avatar", "aria-hidden": "true" }, AGENT_ICONS[a.agent] || "◆"),
           h("span", { class: "agent-name" }, `${a.title} specialist`),
@@ -473,7 +523,8 @@ function renderWarRoom(d) {
         h("div", { class: "agent-text" }, a.assessment),
         a.key_concern ? h("div", { class: "agent-concern" }, h("strong", {}, "Condition: "), a.key_concern) : null,
         a.citations?.length ? h("div", { class: "cite-row" }, a.citations.map(citeButton)) : null);
-    }));
+    });
+    clear(box, cards, renderConnections(d));
     return;
   }
   consensus.textContent = "Four AI specialists review the plan from their domain.";
@@ -488,6 +539,25 @@ function renderWarRoom(d) {
   clear(box, h("div", { class: "warroom-placeholder" },
     h("span", {}, messages[status] || messages.skipped),
     canRun ? h("button", { class: "btn btn-secondary btn-sm", onclick: runReview }, "Run specialist review") : null));
+}
+
+/** "How the concerns connect": dependencies and disagreements found by the Decision Lead. */
+function renderConnections(d) {
+  const brief = d.decision_brief || {};
+  const deps = brief.dependencies || [];
+  const conflicts = brief.conflicts || [];
+  if (!deps.length && !conflicts.length) return null;
+  const titleOf = (key) => (d.specialist_assessments.find((a) => a.agent === key) || {}).title || humanize(key);
+  return h("div", { class: "connections" },
+    h("h5", { class: "mini-head" }, "How the concerns connect"),
+    deps.map((dep) => h("div", { class: "connection" },
+      h("span", { class: "conn-path" },
+        h("span", { "aria-hidden": "true" }, AGENT_ICONS[dep.from_agent] || "◆"), ` ${titleOf(dep.from_agent)} `,
+        h("span", { class: "conn-arrow", "aria-label": "affects" }, "→"),
+        h("span", { "aria-hidden": "true" }, ` ${AGENT_ICONS[dep.to_agent] || "◆"}`), ` ${titleOf(dep.to_agent)}`),
+      h("span", { class: "conn-note" }, dep.note))),
+    conflicts.map((c) => h("div", { class: "connection conflict" },
+      h("span", { class: "conn-path" }, "⚖ Disagreement"), h("span", { class: "conn-note" }, c))));
 }
 
 async function runReview(e) {
@@ -532,20 +602,20 @@ function renderEvidence(d) {
     : h("p", { class: "subcard-hint" }, "No supporting engineering document was retrieved for this pattern."));
 }
 
+/** "Agent ran: simulate_machine_failure → evaluate_recovery_plans": the tools the ADK agent chose. */
+function toolTrace(tools) {
+  const items = [];
+  tools.forEach((t, i) => {
+    if (i) items.push(h("span", { class: "arrow", "aria-hidden": "true" }, "→"));
+    items.push(h("span", { class: "tool", title: JSON.stringify(t.args) }, t.tool));
+  });
+  return h("div", { class: "trace" }, h("span", { class: "fine-print" }, "Agent ran: "), items);
+}
+
 function renderDetails(d) {
-  const trace = $("#agent-trace");
-  if (d.agent_trace?.length) {
-    const items = [];
-    d.agent_trace.forEach((t, i) => {
-      if (i) items.push(h("span", { class: "arrow", "aria-hidden": "true" }, "→"));
-      items.push(h("span", { class: "tool", title: JSON.stringify(t.args) }, t.tool));
-    });
-    clear(trace, h("span", { class: "fine-print" }, "Gemini chose these tools: "), items);
-  } else {
-    clear(trace, h("span", { class: "fine-print" }, d.execution_mode === "live_gemini"
-      ? "Re-ranked deterministically (no tool loop for this step)."
-      : "Deterministic engine run (no Gemini tool loop)."));
-  }
+  clear($("#agent-trace"), h("span", { class: "fine-print" },
+    "Numbers come from the deterministic engine. Questions that need new calculations are answered by the " +
+    "AI agent in “Ask about this decision”, which shows the tools it ran."));
 
   clear($("#weights"), Object.entries(d.objective_weights || {}).map(([k, v]) =>
     h("div", { class: "weight-row" },
@@ -574,8 +644,12 @@ async function ask(question) {
   try {
     const res = await api.ask(question, state.decision);
     pending.replaceWith(h("div", { class: "msg msg-ai" },
-      h("div", {}, res.answer),
+      h("div", { class: "prose" }, renderMarkdown(res.answer)),
+      res.tools_used?.length ? toolTrace(res.tools_used) : null,
       res.citations?.length ? h("div", { class: "cite-row" }, res.citations.map(citeButton)) : null,
+      res.grounding_check && !res.grounding_check.passed
+        ? h("div", { class: "fine-print warn-text" }, `⚠ Not found in engine data: ${res.grounding_check.ungrounded_numbers.join(", ")}`)
+        : null,
       res.source === "rules" ? h("div", { class: "fine-print" }, "Rule-based answer (AI unavailable).") : null));
   } catch (e) {
     pending.replaceWith(h("div", { class: "msg msg-ai" }, `Sorry, I couldn't answer: ${e.message}`));
@@ -595,6 +669,11 @@ function openApproval() {
     h("div", {}, `${d.scenario_summary} · extra cost ${usd(sp.cost_impact_usd)}`),
     d.decision_brief?.specialist_consensus ? h("div", {}, d.decision_brief.specialist_consensus) : null,
   );
+  // Each objection must be acknowledged explicitly before the plan can be approved
+  clear($("#approve-objections"), objectionsOf(d).map((o) =>
+    h("label", { class: "check check-warn" },
+      h("input", { type: "checkbox", required: true, class: "objection-ack" }),
+      h("span", {}, h("strong", {}, `I have reviewed the ${o.title} objection: `), o.reason))));
   try { $("#approver-name").value = localStorage.getItem("fde-approver") || ""; } catch { /* storage unavailable */ }
   $("#approver-ack").checked = false;
   $("#approve-modal").hidden = false;

@@ -30,13 +30,30 @@ class SpecialistAssessment(BaseModel):
     citations: List[str] = Field(default_factory=list, description="Document IDs from EVIDENCE you relied on.")
 
 
+AgentKey = Literal["production", "quality", "maintenance", "energy"]
+
+
+class ConcernLink(BaseModel):
+    from_agent: AgentKey = Field(description="Specialist whose condition or concern has the knock-on effect.")
+    to_agent: AgentKey = Field(description="Department affected by it.")
+    note: str = Field(description="One short plain sentence describing the knock-on effect, without invented durations.")
+
+
 class DecisionBrief(BaseModel):
     headline: str = Field(description="The recommended action in plain words, at most 14 words.")
     summary: str = Field(description="2-3 sentences a plant manager can act on.")
     why: List[str] = Field(description="3-4 short reasons, each grounded in the data.")
     watch_outs: List[str] = Field(description="1-3 conditions or risks to manage.")
     specialist_consensus: str = Field(description="One line, e.g. '3 of 4 specialists support; Quality requires FAI first.'")
-    next_steps: List[str] = Field(description="2-4 concrete next steps for the shift.")
+    next_steps: List[str] = Field(description="2-4 concrete next steps for the shift, in a sensible order.")
+    dependencies: List[ConcernLink] = Field(
+        default_factory=list,
+        description="Where one specialist's condition affects another department (0-3 links).",
+    )
+    conflicts: List[str] = Field(
+        default_factory=list,
+        description="Where specialists disagree with each other or with the plan (empty if none).",
+    )
 
 
 SPECIALISTS: List[Dict[str, str]] = [
@@ -190,14 +207,24 @@ def _specialist_instruction(spec: Dict[str, str]) -> str:
     )
 
 
-def _lead_instruction() -> str:
-    views = "\n".join(f"{s['title']} specialist: {{{s['key']}_view}}" for s in SPECIALISTS)
-    return (
-        "You are the Decision Lead. Using the DECISION DATA in the conversation and these specialist reviews,\n"
-        "write a decision brief for the plant manager about the RECOMMENDED PLAN. Do not change the recommendation;\n"
-        "explain it, surface specialist conditions, and list next steps.\n\n"
-        f"{views}\n\n{COMMON_RULES}"
-    )
+LEAD_ROLE = """You are the Decision Lead. Using the DECISION DATA in the conversation and the specialist reviews
+below, write a decision brief for the plant manager about the RECOMMENDED PLAN. Do not change the
+recommendation; explain it, surface specialist conditions, and list next steps in a sensible order.
+
+Connect the reviews like a real plant meeting:
+- dependencies: where one specialist's condition affects another department (e.g. a Quality inspection
+  and a Maintenance calibration both delay full output, which matters to Production). Describe the effect
+  qualitatively; never invent durations or figures that are not in the DECISION DATA.
+- conflicts: where specialists disagree with each other or with the plan. Leave empty if they agree.
+- If any specialist OPPOSES the plan, the summary must start with that objection, and the headline must
+  not present the plan as settled."""
+
+
+def _lead_instruction(views: Optional[str] = None) -> str:
+    """Lead system prompt; `views` defaults to ADK state placeholders ({production_view}, ...)."""
+    if views is None:
+        views = "\n".join(f"{s['title']} specialist: {{{s['key']}_view}}" for s in SPECIALISTS)
+    return f"{LEAD_ROLE}\n\nSPECIALIST REVIEWS:\n{views}\n\n{COMMON_RULES}"
 
 
 # Identifiers such as KB-QTY-001, PLAN_TRANSFER_07, M17, LINE_B, STA_B2, O1038, Model-C are not quantities
@@ -279,8 +306,7 @@ def _run_parallel(model: str, context_json: str, evidence) -> Dict[str, Any]:
     views = "\n".join(
         f"{s['title']} specialist: {json.dumps(state.get(s['key'] + '_view'))}" for s in SPECIALISTS
     )
-    lead_system = _lead_instruction().split("\n\n")[0] + f"\n\n{views}\n\n{COMMON_RULES}"
-    brief = llm.generate_json(message, DecisionBrief, system=lead_system, temperature=0.2)
+    brief = llm.generate_json(message, DecisionBrief, system=_lead_instruction(views), temperature=0.2)
     if brief is not None:
         state["decision_brief"] = brief.model_dump()
     return state
@@ -378,13 +404,30 @@ def run_war_room(decision, robustness: Optional[Dict[str, Any]] = None, model: O
 
     texts = [a["assessment"] for a in assessments] + [a["headline"] for a in assessments]
     if brief:
-        texts += [brief["summary"], brief["headline"], *brief["why"], *brief["watch_outs"]]
+        # Only keep links between specialists that actually reviewed, and never self-links
+        reviewed = {a["agent"] for a in assessments}
+        brief["dependencies"] = [
+            d for d in brief.get("dependencies", [])
+            if d["from_agent"] in reviewed and d["to_agent"] in reviewed and d["from_agent"] != d["to_agent"]
+        ]
+        texts += [brief["summary"], brief["headline"], *brief["why"], *brief["watch_outs"],
+                  *[d["note"] for d in brief["dependencies"]], *brief.get("conflicts", [])]
     ungrounded = find_ungrounded_numbers(texts, context_json + json.dumps(evidence, default=str))
     if brief is not None:
         brief["specialist_note"] = brief.pop("specialist_consensus", None)
         brief["specialist_consensus"] = _consensus_line(assessments) if assessments else None
+        # Objections are decided by the specialists' own stances, not by the lead's wording
+        brief["objections"] = objections_from(assessments)
         brief["grounding_check"] = {
             "ungrounded_numbers": ungrounded,
             "passed": not ungrounded,
         }
     return assessments, brief
+
+
+def objections_from(assessments: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Specialists who oppose the plan, with their reason, for a deterministic warning banner."""
+    return [
+        {"agent": a["agent"], "title": a["title"], "reason": a.get("key_concern") or a.get("headline") or ""}
+        for a in assessments if a.get("stance") == "oppose"
+    ]

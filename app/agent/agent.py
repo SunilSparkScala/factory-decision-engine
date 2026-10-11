@@ -50,8 +50,11 @@ class FactoryDecisionAgent:
       1. Gemini understands the operator message (validated against the plant registry).
       2. Deterministic Python engine simulates impact, generates and scores recovery plans.
       3. Downtime robustness sweep (deterministic).
-      4. In parallel: the ADK tool-calling Decision agent verifies the case with real tools and writes
-         its analysis, while the ADK specialist war room reviews the recommendation.
+      4. Specialist war room: four Gemini specialists review in parallel, a Decision Lead writes the brief.
+
+    Follow-up questions (`ask`) go to the Google ADK tool-calling agent, which can run new
+    simulations through the deterministic tools: deterministic where predictability matters,
+    agentic where flexibility matters.
     """
 
     def __init__(
@@ -162,43 +165,40 @@ class FactoryDecisionAgent:
             "constraints": {k: v for k, v in (prev.applied_constraints or {}).items() if v},
         }
 
-    def _run_live_adk(self, prompt: str, scenario: Optional[Dict[str, Any]] = None) -> DecisionResponse:
+    def _ask_with_agent(self, question: str, decision: DecisionResponse) -> Dict[str, Any]:
         """
-        Execute prompt via Google ADK Runner + Gemini Agent session.
-        Listens to event stream, capturing tool calls, tool responses, and model rationale.
+        Answer a question with the Google ADK tool-calling agent. The agent may run NEW simulations
+        and evaluations (other machines, durations, priorities) through the deterministic tools, so
+        every figure it quotes comes from the engine. Raises on failure; `ask` falls back.
         """
+        import json
         import uuid
         from google.genai import types
 
-        session_id = f"session_{uuid.uuid4().hex[:12]}"
-        message_text = prompt
-        if scenario and scenario.get("machine_id"):
-            cons = [k.replace("disallow_", "no ").replace("_", " ") for k in CONSTRAINT_KEYS if scenario.get(k)]
-            message_text += (
-                "\n\n[Validated scenario interpretation: "
-                f"machine_id={scenario['machine_id']}; downtime_hours={scenario['downtime_hours']}; "
-                f"priorities={scenario.get('priorities') or 'default'}; "
-                f"constraints={', '.join(cons) or 'none'}]"
-            )
-        user_msg = types.Content(
-            role="user",
-            parts=[types.Part.from_text(text=message_text)],
-        )
+        from app.agent.specialists import build_decision_context, find_ungrounded_numbers
+        from app.ai.llm import compact_json
 
-        # Skip a model that is cooling down after a quota/overload error (free-tier protection)
+        imp = decision.impact_summary or {}
+        context = build_decision_context(decision, decision.robustness)
+        evidence = [{"id": e.document_id, "title": e.title, "excerpt": e.excerpt} for e in decision.engineering_evidence]
+        scenario_line = (
+            f"machine_id={imp.get('machine_id')}; downtime_hours={imp.get('downtime_hours')}; "
+            f"constraints={', '.join(k for k, v in (decision.applied_constraints or {}).items() if v) or 'none'}"
+        )
+        message = (
+            f"CURRENT SCENARIO: {scenario_line}\n\n"
+            f"CURRENT DECISION (from the deterministic engine):\n{compact_json(context)}\n\n"
+            f"EVIDENCE ALREADY RETRIEVED:\n{compact_json(evidence, 4000)}\n\n"
+            f"QUESTION FROM THE PLANT MANAGER:\n{question}"
+        )
+        user_msg = types.Content(role="user", parts=[types.Part.from_text(text=message)])
+
+        # Skip a model that is cooling down after a quota/overload error
         model = usable_models(chain_for(self.model_name))[0]
         self.adk_agent.model = model
-        logger.info(f"Starting ADK Runner session '{session_id}' with model '{model}'...")
-        tool_calls: List[Dict[str, Any]] = []
-        tool_responses: List[Dict[str, Any]] = []
-        final_text_parts: List[str] = []
-
+        session_id = f"ask_{uuid.uuid4().hex[:12]}"
         try:
-            events = list(self.runner.run(
-                user_id="plant_operator",
-                session_id=session_id,
-                new_message=user_msg,
-            ))
+            events = list(self.runner.run(user_id="plant_operator", session_id=session_id, new_message=user_msg))
         except Exception as e:
             if is_retryable(e):
                 mark_unavailable(model, e)
@@ -206,104 +206,40 @@ class FactoryDecisionAgent:
         finally:
             self.adk_agent.model = self.model_name
 
+        tool_calls: List[Dict[str, Any]] = []
+        tool_responses: List[Any] = []
+        text_parts: List[str] = []
         for event in events:
-            fcs = event.get_function_calls()
-            if fcs:
-                for fc in fcs:
-                    tool_calls.append({"name": fc.name, "args": fc.args or {}})
-                    logger.info(f"ADK tool call: {fc.name}({fc.args})")
+            for fc in event.get_function_calls() or []:
+                tool_calls.append({"tool": fc.name, "args": fc.args or {}})
+            for fr in event.get_function_responses() or []:
+                resp_val = fr.response
+                if isinstance(resp_val, dict) and isinstance(resp_val.get("result"), dict):
+                    resp_val = resp_val["result"]
+                tool_responses.append(resp_val)
+            if event.is_final_response() and event.message and event.message.parts:
+                text_parts.extend(p.text for p in event.message.parts if getattr(p, "text", None))
 
-            frs = event.get_function_responses()
-            if frs:
-                for fr in frs:
-                    resp_val = fr.response
-                    if isinstance(resp_val, dict) and "result" in resp_val and isinstance(resp_val["result"], dict):
-                        resp_val = resp_val["result"]
-                    tool_responses.append({"name": fr.name, "response": resp_val})
-                    logger.info(f"ADK tool response: {fr.name}")
+        answer = "\n".join(text_parts).strip()
+        if not answer:
+            raise RuntimeError("Agent returned no answer")
 
-            if event.is_final_response():
-                if event.message and event.message.parts:
-                    for part in event.message.parts:
-                        if hasattr(part, "text") and part.text:
-                            final_text_parts.append(part.text)
-
-        final_rationale = "\n".join(final_text_parts).strip()
-        logger.info(
-            f"ADK live loop completed: {len(tool_calls)} calls, "
-            f"{len(tool_responses)} responses, text length: {len(final_rationale)}"
-        )
-
-        return self._convert_adk_run_to_decision(
-            prompt=prompt,
-            tool_calls=tool_calls,
-            tool_responses=tool_responses,
-            model_text=final_rationale,
-            scenario=scenario,
-        )
-
-    def _convert_adk_run_to_decision(
-        self,
-        prompt: str,
-        tool_calls: List[Dict[str, Any]],
-        tool_responses: List[Dict[str, Any]],
-        model_text: str,
-        scenario: Optional[Dict[str, Any]] = None,
-    ) -> DecisionResponse:
-        """
-        Controlled conversion layer: validates and formats ADK tool outputs into DecisionResponse.
-        Strictly preserves deterministic numerical authority in Python.
-        """
-        parsed_params = scenario or self._parse_scenario_prompt(prompt)
-        machine_id = parsed_params["machine_id"]
-        downtime_hours = parsed_params["downtime_hours"]
-        priorities = parsed_params["priorities"]
-
-        # Without a validated interpretation, trust the parameters the agent actually simulated
-        if scenario is None:
-            for tr in reversed(tool_responses):
-                if tr.get("name") == "simulate_machine_failure" and isinstance(tr.get("response"), dict) and tr["response"].get("success"):
-                    machine_id = tr["response"].get("machine_id", machine_id)
-                    downtime_hours = float(tr["response"].get("downtime_hours", downtime_hours))
-                    break
-
-        # Check if search_engineering_knowledge was executed during live run
-        live_evidence: List[EvidenceItem] = []
-        seen_doc_ids = set()
-        for tr in tool_responses:
-            if tr.get("name") == "search_engineering_knowledge" and isinstance(tr.get("response"), dict):
-                for doc in tr["response"].get("evidence", []):
-                    if isinstance(doc, dict) and doc.get("document_id") and doc["document_id"] not in seen_doc_ids:
-                        seen_doc_ids.add(doc["document_id"])
-                        live_evidence.append(EvidenceItem(**doc))
-
-        # Produce complete deterministic response using harvested tool results
-        base_decision = self.orchestrator.orchestrate(
-            machine_id=machine_id,
-            downtime_hours=downtime_hours,
-            priorities=priorities,
-            constraints={k: parsed_params.get(k, False) for k in CONSTRAINT_KEYS},
-            execution_mode="live_gemini",
-            fallback_reason=None,
-            clarification_needed=parsed_params.get("clarification_needed"),
-            eval_fn=None,
-        )
-
-        if live_evidence:
-            # Keep deterministic evidence categories, add documents the agent found on its own
-            known = {e.document_id for e in base_decision.engineering_evidence}
-            base_decision.engineering_evidence.extend(e for e in live_evidence if e.document_id not in known)
-
-        base_decision.agent_trace = [{"tool": tc["name"], "args": tc["args"]} for tc in tool_calls]
-
-        # Overlay Gemini model rationale if generated
-        if model_text and model_text.strip():
-            base_decision.rationale = model_text.strip()
-
-        if base_decision.selected_plan is not None and not base_decision.clarification_needed:
-            self.last_response = base_decision
-
-        return base_decision
+        grounding_text = compact_json(context, 50_000) + json.dumps(evidence, default=str) + json.dumps(tool_responses, default=str)
+        known_docs = {e["id"] for e in evidence}
+        for resp_val in tool_responses:
+            if isinstance(resp_val, dict):
+                known_docs.update(d.get("document_id") for d in resp_val.get("evidence", []) if isinstance(d, dict))
+        citations = sorted(doc for doc in known_docs if doc and doc in answer)
+        ungrounded = find_ungrounded_numbers([answer], grounding_text)
+        logger.info(f"ADK ask completed: {len(tool_calls)} tool calls, {len(answer)} chars")
+        return {
+            "answer": answer,
+            "citations": citations,
+            "confidence": "high" if not ungrounded else "partial",
+            "source": "agent",
+            "tools_used": tool_calls,
+            "grounding_check": {"ungrounded_numbers": ungrounded, "passed": not ungrounded},
+        }
 
     # ------------------------------------------------------------------
     # Public entry points
@@ -391,43 +327,28 @@ class FactoryDecisionAgent:
             )
             return self._enrich(decision, understood, components, war_room=None)
 
-        scenario = dict(understood, priorities=priorities)
-        base = self.orchestrator.orchestrate(
+        # Live pipeline: deterministic engine is the source of truth; Gemini specialists review it.
+        # (The ADK tool-calling agent answers open questions in `ask`, where new simulations are needed.)
+        decision = self.orchestrate_scenario(
             machine_id=understood["machine_id"],
             downtime_hours=understood["downtime_hours"],
             priorities=priorities,
             constraints=constraints,
             execution_mode="live_gemini",
+            clarification_needed=understood.get("clarification_needed"),
         )
-        robustness = self._robustness(base, understood, priorities, constraints)
+        decision.robustness = self._robustness(decision, understood, priorities, constraints)
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            war_future = (
-                pool.submit(run_war_room_resilient, base, robustness)
-                if self.llm_available and base.selected_plan is not None else None
-            )
-            try:
-                decision = self._run_live_adk(prompt, scenario)
-                components["agent_loop"] = "gemini"
-            except Exception as e:
-                logger.warning(
-                    f"Live Gemini ADK execution failed: {e}. Falling back to deterministic local orchestration.",
-                    exc_info=True,
-                )
-                components["agent_loop"] = "failed"
-                decision = self.orchestrate_scenario(
-                    machine_id=understood["machine_id"],
-                    downtime_hours=understood["downtime_hours"],
-                    priorities=priorities,
-                    constraints=constraints,
-                    execution_mode="deterministic_fallback",
-                    fallback_reason=f"Live Gemini ADK execution failed ({type(e).__name__}: {str(e)}); used deterministic fallback.",
-                    clarification_needed=understood.get("clarification_needed"),
-                )
-            war_room = self._collect_war_room(war_future)
+        war_room = None
+        if self.llm_available and decision.selected_plan is not None:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                war_room = self._collect_war_room(pool.submit(run_war_room_resilient, decision, decision.robustness))
 
-        decision.robustness = robustness
-        return self._enrich(decision, understood, components, war_room=war_room)
+        result = self._enrich(decision, understood, components, war_room=war_room)
+        if result.ai_components.get("understanding") != "gemini" and result.ai_components.get("war_room") != "gemini":
+            result.execution_mode = "deterministic_fallback"
+            result.fallback_reason = "Gemini was unavailable for this request; showing the deterministic engine result."
+        return result
 
     def what_if(
         self,
@@ -493,7 +414,17 @@ class FactoryDecisionAgent:
         return res
 
     def ask(self, question: str, decision: DecisionResponse) -> Dict[str, Any]:
-        """Grounded Q&A about a decision."""
+        """
+        Grounded Q&A about a decision. The ADK tool-calling agent answers first (it can run new
+        simulations); if it is unavailable or fails, fall back to a single grounded Gemini call,
+        then to a rule-based template.
+        """
+        if self.live_ai:
+            try:
+                return self._ask_with_agent(question, decision)
+            except Exception as e:
+                # Never surface the raw error (it may contain credentials); just degrade
+                logger.warning(f"ADK ask agent failed ({type(e).__name__}); using single-call answer.")
         return answer_question(self.llm, question, decision)
 
     def reset_state(self) -> None:

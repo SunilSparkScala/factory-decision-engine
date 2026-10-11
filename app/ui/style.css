@@ -566,3 +566,30 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ------------------------------------------- war room: objections & connections */
+.objection-banner { margin: 0 0 var(--space-4); }
+.agent-card.opposes { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); box-shadow: 0 0 0 2px var(--danger-soft); }
+.connections { grid-column: 1 / -1; border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 10px 14px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.connections .mini-head { margin: 0; }
+.connection { display: grid; grid-template-columns: minmax(200px, auto) 1fr; gap: 10px; align-items: baseline; font-size: 13px; }
+.conn-path { font-weight: 600; white-space: nowrap; }
+.conn-arrow { color: var(--primary); font-weight: 700; padding: 0 2px; }
+.conn-note { color: var(--text-2); }
+.connection.conflict .conn-path { color: var(--warn); }
+.reviewing { display: inline-flex; align-items: center; gap: 8px; }
+.spinner.inline { display: inline-block; color: var(--primary); }
+.check-warn { background: var(--danger-soft); border-radius: var(--radius-sm); padding: 8px 10px; }
+.rec-hero.outdated { opacity: 0.55; }
+@media (max-width: 640px) { .connection { grid-template-columns: 1fr; } .conn-path { white-space: normal; } }
+
+.warn-text { color: var(--warn); }
+.msg-ai .trace { margin: 6px 0 0; }
+.msg-ai .prose { max-height: none; margin: 0; color: var(--text); }
+
+/* progress: sequential stages, then the parallel specialist stage */
+.progress { align-items: center; }
+.progress-arrow { color: var(--text-3); font-weight: 700; }
+.progress-step small { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.progress-parallel { flex: 1.6; }
+@media (max-width: 860px) { .progress-arrow { display: none; } }

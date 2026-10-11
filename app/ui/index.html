@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Factory Decision Engine</title>
   <meta name="description" content="Before you change the factory, understand what happens next.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%231d4ed8'/%3E%3Cpath d='M5 19V11l4 2.4V11l4 2.4V8l6 3v8z' fill='white'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -148,11 +149,15 @@
             <button class="chip-btn btn-reset" id="btn-reset-demo" title="Restore the canonical demo scenario">↺ Reset Demo</button>
           </div>
 
-          <div id="progress" class="progress" hidden aria-live="polite">
-            <div class="progress-step" data-stage="0"><span class="ps-dot"></span>Understanding the message</div>
-            <div class="progress-step" data-stage="1"><span class="ps-dot"></span>Simulating impact &amp; options</div>
-            <div class="progress-step" data-stage="2"><span class="ps-dot"></span>Agent verifying with tools</div>
-            <div class="progress-step" data-stage="3"><span class="ps-dot"></span>Specialists reviewing</div>
+          <div id="progress" class="progress" hidden aria-live="polite" title="Stage timing is estimated; the result appears when all stages finish.">
+            <div class="progress-step" data-stage="0"><span class="ps-dot"></span>1 · Gemini understands the message</div>
+            <span class="progress-arrow" aria-hidden="true">→</span>
+            <div class="progress-step" data-stage="1"><span class="ps-dot"></span>2 · Engine calculates impact &amp; options</div>
+            <span class="progress-arrow" aria-hidden="true">→</span>
+            <div class="progress-step progress-parallel" data-stage="2">
+              <span class="ps-dot"></span>
+              <span>3 · Specialists review <small>Production · Quality · Maintenance · Energy, side by side → Decision Lead</small></span>
+            </div>
           </div>
 
           <div id="interpretation" class="interpretation" hidden></div>
@@ -203,6 +208,8 @@
         <li class="flow-step card" id="step-recommendation" hidden>
           <div class="step-head"><span class="step-num">4</span><h2>Recommendation</h2></div>
 
+          <div id="rec-objections" class="callout callout-error objection-banner" hidden role="alert"></div>
+
           <div class="rec-hero">
             <div class="rec-main">
               <span class="eyebrow">Recommended action</span>
@@ -251,7 +258,7 @@
           <div class="subcard" id="ask-card">
             <div class="subcard-head">
               <h4>Ask about this decision</h4>
-              <span class="subcard-hint">Answers are grounded in the engine's numbers and the plant's documents.</span>
+              <span class="subcard-hint">An AI agent answers, and runs new simulations when your question needs them (e.g. “what if M26 also breaks?”).</span>
             </div>
             <div class="chat" id="chat-log" aria-live="polite"></div>
             <form class="ask-form" id="ask-form" autocomplete="off">
@@ -263,6 +270,7 @@
               <button class="chip-btn" data-question="Why not use overtime?">Why not overtime?</button>
               <button class="chip-btn" data-question="What is the biggest risk with this plan?">Biggest risk?</button>
               <button class="chip-btn" data-question="Explain this decision to my plant director in 3 short lines.">Explain to my director</button>
+              <button class="chip-btn" data-question="What if M26 also breaks down for 8 hours?" title="The AI agent runs a new simulation to answer this">What if M26 also breaks? ⚙</button>
             </div>
           </div>
 
@@ -275,14 +283,14 @@
             <summary>Engineering details</summary>
             <div class="details-grid">
               <div>
-                <h4 class="mini-head">AI agent trace</h4>
+                <h4 class="mini-head">Where the numbers come from</h4>
                 <div id="agent-trace" class="trace"></div>
                 <h4 class="mini-head">Priority weights used by the optimizer</h4>
                 <div id="weights" class="weights"></div>
                 <p class="fine-print" title="Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty.">Delivery impact score: Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty.</p>
               </div>
               <div>
-                <h4 class="mini-head">Decision agent analysis</h4>
+                <h4 class="mini-head">Engine rationale</h4>
                 <div id="rationale" class="prose"></div>
                 <h4 class="mini-head">Assumptions</h4>
                 <ul id="assumptions" class="plain-list"></ul>
@@ -338,6 +346,7 @@
             <span>Note (optional)</span>
             <textarea id="approver-note" rows="2" placeholder="Anything the floor team should know"></textarea>
           </label>
+          <div id="approve-objections"></div>
           <label class="check">
             <input type="checkbox" id="approver-ack" required>
             <span>I have reviewed the impact, risks and specialist conditions.</span>

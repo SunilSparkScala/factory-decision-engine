@@ -12,6 +12,12 @@ MAX_SWEEP_HOURS = 48.0
 BASE_SWEEP = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48]
 
 
+def _format_ranges(ranges: List[List[float]]) -> str:
+    """[[1, 6], [10, 12]] -> '1–6 h and 10–12 h'; single points render as '8 h'."""
+    parts = [f"{a:g} h" if a == b else f"{a:g}–{b:g} h" for a, b in ranges]
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 def _sweep_points(downtime: float, downtime_range: Optional[Sequence[float]]) -> List[float]:
     points = set(BASE_SWEEP)
     points.update({downtime, downtime * 0.5, downtime * 1.5, downtime * 2})
@@ -82,19 +88,24 @@ def analyze_robustness(
         p["recommended_plan_is_best"] for p in points if lo <= p["downtime_hours"] <= hi
     )
 
-    if best_hours:
-        summary = (
-            f"Recommended plan stays the best choice from {min(best_hours):g} h to {max(best_hours):g} h of downtime."
-        )
+    # Describe every contiguous range, so a plan that wins, loses, then wins again is reported honestly
+    best_ranges = [[s["from_hours"], s["to_hours"]] for s in segments if s["is_recommended"]]
+    if best_ranges:
+        summary = f"Recommended plan is the best choice at {_format_ranges(best_ranges)} of downtime."
     else:
         summary = "Recommended plan is not the top choice anywhere else in the tested range."
-    other = [s for s in segments if not s["is_recommended"] and s["plan_id"]]
-    if other:
-        alt = other[0]
-        summary += (
-            f" Between {alt['from_hours']:g} h and {alt['to_hours']:g} h, "
-            f"{(alt['strategy'] or '').replace('_', ' ').lower()} ({alt['plan_id']}) is better."
-        )
+
+    alternatives: Dict[str, List[List[float]]] = {}
+    for s in segments:
+        if not s["is_recommended"] and s["plan_id"]:
+            label = f"{(s['strategy'] or '').replace('_', ' ').lower()} ({s['plan_id']})"
+            alternatives.setdefault(label, []).append([s["from_hours"], s["to_hours"]])
+    for label, ranges in alternatives.items():
+        summary += f" At {_format_ranges(ranges)}, {label} is better."
+
+    no_plan = [[s["from_hours"], s["to_hours"]] for s in segments if not s["plan_id"]]
+    if no_plan:
+        summary += f" No feasible plan at {_format_ranges(no_plan)}."
     if infeasible_after is not None:
         summary += f" It becomes infeasible beyond about {infeasible_after:g} h."
 
@@ -103,6 +114,7 @@ def analyze_robustness(
         "base_downtime_hours": downtime_hours,
         "downtime_range": list(downtime_range) if downtime_range else None,
         "holds_for_stated_range": holds_for_range,
+        "best_ranges": best_ranges,
         "best_from_hours": min(best_hours) if best_hours else None,
         "best_to_hours": max(best_hours) if best_hours else None,
         "infeasible_after_hours": infeasible_after,
