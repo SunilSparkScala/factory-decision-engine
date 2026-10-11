@@ -23,7 +23,7 @@ source_type: synthetic
 On Q3 2026 Shift 2, Machine M17 (Welding Unit 2 on Line B) experienced an unscheduled thermal shutdown caused by a faulty axis-3 servo drive. Downtime duration was 8.0 hours.
 
 ## 2. Recovery Action Taken
-- Production workload (Model-C chassis welding) was temporarily transferred to alternative machine M18 on Line B (Station B2) and M05 on Line A.
+- Production workload (Cruiser chassis welding) was temporarily transferred to alternative machine M18 on Line B (Station B2) and M05 on Line A.
 - First Article Inspection (FAI) was completed cleanly within 35 minutes.
 - All high-priority orders (O1038, O1044) met delivery deadlines without customer disruption.
 

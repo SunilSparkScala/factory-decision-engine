@@ -9,7 +9,7 @@ import {
   deliveryLabel, qualityLabel, riskLabel, deliveryRiskTone, stanceInfo, presetForWeights, humanize,
 } from "../format.js";
 
-const CANONICAL_PROMPT = "M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.";
+const CANONICAL_PROMPT = () => $("#step-input .chip-btn[data-example='clear']").dataset.prompt;
 const STEP_IDS = ["#step-impact", "#step-options", "#step-recommendation", "#step-approve"];
 const AGENT_ICONS = { production: "🏭", quality: "🔍", maintenance: "🔧", energy: "⚡" };
 
@@ -52,6 +52,23 @@ export function init(context) {
 
 export function onShow() {}
 
+/** Use the industry pack's example sentences and start a clean workspace for the new plant. */
+export function applyPack(pack) {
+  if (!pack) return;
+  for (const chip of $$("#step-input .chip-btn[data-example]")) {
+    const text = pack.examples[chip.dataset.example];
+    if (text) chip.dataset.prompt = text;
+  }
+  $("#scenario-input").placeholder = pack.examples.placeholder;
+  $("#scenario-input").value = "";
+  state.decision = null;
+  hideMessages();
+  $("#interpretation").hidden = true;
+  $("#approval-result").hidden = true;
+  clear($("#chat-log"));
+  showSteps(false);
+}
+
 export function focusInput() {
   const input = $("#scenario-input");
   input.focus();
@@ -68,7 +85,7 @@ function resetDemo() {
   state.decision = null;
   clear($("#chat-log"));
   $("#approval-result").hidden = true;
-  analyze(CANONICAL_PROMPT, { fresh: true });
+  analyze(CANONICAL_PROMPT(), { fresh: true });
 }
 
 // ------------------------------------------------------------------ analyze

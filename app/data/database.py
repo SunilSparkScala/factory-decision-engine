@@ -17,7 +17,10 @@ from app.models import (
 )
 
 def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
-    target_path = db_path or config.DB_PATH
+    # Without an explicit path, use the database of the industry pack active for this request
+    from app.domains import db_path_for
+
+    target_path = db_path or db_path_for()
     target_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(target_path))
     conn.row_factory = sqlite3.Row

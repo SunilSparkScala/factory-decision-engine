@@ -10,33 +10,13 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from app.config import config
+from app.domains import current_domain, get_pack
 
-SCRIPTED_FAULTS: List[Dict[str, Any]] = [
-    {
-        "machine_id": "M17", "code": "E-42", "title": "Welding arm jam",
-        "detail": "Robot arm stopped mid-cycle on Station B2; servo overcurrent detected.",
-        "repair_hours": [6, 10], "severity": "HIGH",
-    },
-    {
-        "machine_id": "M05", "code": "W-17", "title": "Wire feed fault",
-        "detail": "Welding wire feed motor stalled on Station A2.",
-        "repair_hours": [2, 4], "severity": "MEDIUM",
-    },
-    {
-        "machine_id": "M31", "code": "T-08", "title": "Torque tool failure",
-        "detail": "Nutrunner torque out of tolerance on Station C3; tool locked out.",
-        "repair_hours": [4, 8], "severity": "HIGH",
-    },
-    {
-        "machine_id": "M20", "code": "P-23", "title": "Paint booth humidity out of range",
-        "detail": "Booth humidity above process window on Station B3; line held for quality.",
-        "repair_hours": [3, 5], "severity": "MEDIUM",
-    },
-]
 
+# Fired alerts and the next scripted fault, kept separately for each industry pack
 _lock = threading.Lock()
-_fired: List[Dict[str, Any]] = []
-_next_index = 0
+_fired: Dict[str, List[Dict[str, Any]]] = {}
+_next_index: Dict[str, int] = {}
 
 
 def _fault_alert(fault: Dict[str, Any], seq: int) -> Dict[str, Any]:
@@ -58,21 +38,21 @@ def _fault_alert(fault: Dict[str, Any], seq: int) -> Dict[str, Any]:
 
 
 def simulate_fault() -> Dict[str, Any]:
-    """Raise the next scripted fault (demo trigger for an incoming machine event)."""
-    global _next_index
+    """Raise the next scripted fault of the active industry pack (demo trigger for a machine event)."""
+    domain = current_domain()
+    faults = get_pack()["faults"]
     with _lock:
-        fault = SCRIPTED_FAULTS[_next_index % len(SCRIPTED_FAULTS)]
-        _next_index += 1
-        alert = _fault_alert(fault, _next_index)
-        _fired.insert(0, alert)
+        seq = _next_index.get(domain, 0)
+        _next_index[domain] = seq + 1
+        alert = _fault_alert(faults[seq % len(faults)], seq + 1)
+        _fired.setdefault(domain, []).insert(0, alert)
         return alert
 
 
 def reset_alerts() -> None:
-    global _next_index
     with _lock:
         _fired.clear()
-        _next_index = 0
+        _next_index.clear()
 
 
 def predictive_alerts(watch_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -98,5 +78,5 @@ def predictive_alerts(watch_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def list_alerts(watch_list: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     with _lock:
-        fired = list(_fired)
+        fired = list(_fired.get(current_domain(), []))
     return fired + predictive_alerts(watch_list or [])

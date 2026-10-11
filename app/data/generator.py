@@ -2,6 +2,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 from app.config import config
+from app.domains import get_pack
 from app.models import (
     Factory,
     ProductionLine,
@@ -12,7 +13,6 @@ from app.models import (
     OrderPriority,
     OrderStatus,
     ProductionSchedule,
-    OperationType,
     Material,
     Supplier,
     SupplierStatus,
@@ -21,69 +21,58 @@ from app.models import (
     MaintenanceStatus,
 )
 
+# Station layout: (station_id, line_id, operation slot, capacity/hour). Operation slots index the
+# pack's operations [press, join, finish, assemble, inspect]; names come from the industry pack.
+STATION_LAYOUT = [
+    ("STA_A1", "LINE_A", 0, 65.0), ("STA_A2", "LINE_A", 1, 60.0), ("STA_A3", "LINE_A", 2, 55.0), ("STA_A4", "LINE_A", 3, 50.0),
+    ("STA_B1", "LINE_B", 0, 55.0), ("STA_B2", "LINE_B", 1, 50.0), ("STA_B3", "LINE_B", 2, 45.0), ("STA_B4", "LINE_B", 3, 45.0),
+    ("STA_C1", "LINE_C", 1, 75.0), ("STA_C2", "LINE_C", 2, 70.0), ("STA_C3", "LINE_C", 3, 65.0), ("STA_C4", "LINE_C", 4, 80.0),
+]
+
+
 class SyntheticFactoryGenerator:
-    def __init__(self, seed: int = config.RANDOM_SEED):
+    def __init__(self, seed: int = config.RANDOM_SEED, domain: str = None):
         self.seed = seed
         self.rng = random.Random(seed)
+        self.pack = get_pack(domain)
         
     def generate_all(self) -> Dict[str, list]:
         self.rng.seed(self.seed)
         base_time = datetime(2026, 10, 1, 8, 0, 0, tzinfo=timezone.utc)
         
+        pack = self.pack
+        m_s, m_e, m_c, m_x = pack["models"]
+
         # 1. Factory
         factory = Factory(
             factory_id="F01",
-            name="Apex Automotive Plant 1",
-            location="Stuttgart, Germany",
+            name=pack["plant"]["name"],
+            location=pack["plant"]["location"],
             operating_hours=config.OPERATING_HOURS_PER_DAY
         )
-        
+
         # 2. Production Lines
         lines = [
-            ProductionLine(
-                line_id="LINE_A",
-                name="Line A (Sedan)",
-                capacity_per_hour=60.0,
-                supported_models=["Model-S", "Model-E"],
-                status="OPERATIONAL"
-            ),
-            ProductionLine(
-                line_id="LINE_B",
-                name="Line B (SUV)",
-                capacity_per_hour=50.0,
-                supported_models=["Model-E", "Model-C"],
-                status="OPERATIONAL"
-            ),
-            ProductionLine(
-                line_id="LINE_C",
-                name="Line C (Compact)",
-                capacity_per_hour=70.0,
-                supported_models=["Model-C", "Model-X"],
-                status="OPERATIONAL"
-            )
+            ProductionLine(line_id="LINE_A", name=pack["lines"]["LINE_A"], capacity_per_hour=60.0,
+                           supported_models=[m_s, m_e], status="OPERATIONAL"),
+            ProductionLine(line_id="LINE_B", name=pack["lines"]["LINE_B"], capacity_per_hour=50.0,
+                           supported_models=[m_e, m_c], status="OPERATIONAL"),
+            ProductionLine(line_id="LINE_C", name=pack["lines"]["LINE_C"], capacity_per_hour=70.0,
+                           supported_models=[m_c, m_x], status="OPERATIONAL"),
         ]
-        
+
         # 3. Stations (12 total across 3 lines)
-        stations = [
-            # Line A
-            Station(station_id="STA_A1", line_id="LINE_A", name="Station A1 - Stamping", operation_type=OperationType.STAMPING.value, capacity_per_hour=65.0),
-            Station(station_id="STA_A2", line_id="LINE_A", name="Station A2 - Welding", operation_type=OperationType.WELDING.value, capacity_per_hour=60.0),
-            Station(station_id="STA_A3", line_id="LINE_A", name="Station A3 - Painting", operation_type=OperationType.PAINTING.value, capacity_per_hour=55.0),
-            Station(station_id="STA_A4", line_id="LINE_A", name="Station A4 - Assembly", operation_type=OperationType.ASSEMBLY.value, capacity_per_hour=50.0),
-            
-            # Line B
-            Station(station_id="STA_B1", line_id="LINE_B", name="Station B1 - Stamping", operation_type=OperationType.STAMPING.value, capacity_per_hour=55.0),
-            Station(station_id="STA_B2", line_id="LINE_B", name="Station B2 - Welding", operation_type=OperationType.WELDING.value, capacity_per_hour=50.0),
-            Station(station_id="STA_B3", line_id="LINE_B", name="Station B3 - Painting", operation_type=OperationType.PAINTING.value, capacity_per_hour=45.0),
-            Station(station_id="STA_B4", line_id="LINE_B", name="Station B4 - Assembly", operation_type=OperationType.ASSEMBLY.value, capacity_per_hour=45.0),
-            
-            # Line C
-            Station(station_id="STA_C1", line_id="LINE_C", name="Station C1 - Welding", operation_type=OperationType.WELDING.value, capacity_per_hour=75.0),
-            Station(station_id="STA_C2", line_id="LINE_C", name="Station C2 - Painting", operation_type=OperationType.PAINTING.value, capacity_per_hour=70.0),
-            Station(station_id="STA_C3", line_id="LINE_C", name="Station C3 - Assembly", operation_type=OperationType.ASSEMBLY.value, capacity_per_hour=65.0),
-            Station(station_id="STA_C4", line_id="LINE_C", name="Station C4 - Inspection", operation_type=OperationType.INSPECTION.value, capacity_per_hour=80.0),
-        ]
-        
+        stations = []
+        for station_id, line_id, op_slot, capacity in STATION_LAYOUT:
+            op = pack["operations"][op_slot]
+            stations.append(Station(
+                station_id=station_id,
+                line_id=line_id,
+                name=f"Station {station_id[-2:]} - {op['display']}",
+                operation_type=op["code"],
+                capacity_per_hour=capacity,
+            ))
+
         # 4. Machines (3 machines per station = 36 machines)
         machines = []
         machine_idx = 1
@@ -129,10 +118,10 @@ class SyntheticFactoryGenerator:
         # 5. Orders (55 orders)
         orders = []
         model_line_map = {
-            "Model-S": "LINE_A",
-            "Model-E": "LINE_A",
-            "Model-C": "LINE_B",
-            "Model-X": "LINE_C"
+            m_s: "LINE_A",
+            m_e: "LINE_A",
+            m_c: "LINE_B",
+            m_x: "LINE_C"
         }
         
         priorities = [OrderPriority.HIGH, OrderPriority.MEDIUM, OrderPriority.LOW]
@@ -198,34 +187,19 @@ class SyntheticFactoryGenerator:
                 current_start = end_time + timedelta(minutes=15)
 
         # 7. Materials (25 materials)
-        materials_data = [
-            ("MAT_01", "Steel Sheets", 5000.0, 1000.0),
-            ("MAT_02", "Aluminum Panels", 3500.0, 800.0),
-            ("MAT_03", "Welding Wire", 1200.0, 300.0),
-            ("MAT_04", "Automotive Primer", 800.0, 200.0),
-            ("MAT_05", "Gloss Paint Coat", 950.0, 250.0),
-            ("MAT_06", "Wiring Harness", 1500.0, 400.0),
-            ("MAT_07", "Brake Assemblies", 600.0, 150.0),
-            ("MAT_08", "Engine Blocks", 400.0, 100.0),
-            ("MAT_09", "Transmission Units", 350.0, 90.0),
-            ("MAT_10", "Tires & Alloy Wheels", 2400.0, 600.0),
-            ("MAT_11", "Windshields", 500.0, 120.0),
-            ("MAT_12", "LED Headlight Units", 750.0, 200.0),
-            ("MAT_13", "Leather Seats", 450.0, 100.0),
-            ("MAT_14", "Dashboard Assemblies", 400.0, 100.0),
-            ("MAT_15", "Exhaust Pipes", 650.0, 150.0),
-            ("MAT_16", "Fuel Tanks", 550.0, 130.0),
-            ("MAT_17", "Radiator Grilles", 700.0, 180.0),
-            ("MAT_18", "Side Mirrors", 900.0, 220.0),
-            ("MAT_19", "Airbag Modules", 850.0, 200.0),
-            ("MAT_20", "Suspension Springs", 1100.0, 300.0),
-            ("MAT_21", "Steering Columns", 480.0, 120.0),
-            ("MAT_22", "Door Panels", 1600.0, 400.0),
-            ("MAT_23", "Bumper Guards", 720.0, 180.0),
-            ("MAT_24", "Battery Packs", 380.0, 90.0),
-            ("MAT_25", "Quality Test Markers", 3000.0, 500.0),
+        # (id, available quantity, safety stock); names come from the industry pack
+        materials_stock = [
+            (5000.0, 1000.0), (3500.0, 800.0), (1200.0, 300.0), (800.0, 200.0), (950.0, 250.0),
+            (1500.0, 400.0), (600.0, 150.0), (400.0, 100.0), (350.0, 90.0), (2400.0, 600.0),
+            (500.0, 120.0), (750.0, 200.0), (450.0, 100.0), (400.0, 100.0), (650.0, 150.0),
+            (550.0, 130.0), (700.0, 180.0), (900.0, 220.0), (850.0, 200.0), (1100.0, 300.0),
+            (480.0, 120.0), (1600.0, 400.0), (720.0, 180.0), (380.0, 90.0), (3000.0, 500.0),
         ]
-        
+        materials_data = [
+            (f"MAT_{i:02d}", name, stock[0], stock[1])
+            for i, (name, stock) in enumerate(zip(pack["materials"], materials_stock), start=1)
+        ]
+
         materials = [
             Material(
                 material_id=m[0],

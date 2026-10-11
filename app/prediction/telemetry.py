@@ -14,6 +14,7 @@ from datetime import timedelta
 from typing import Dict, List
 
 from app.config import config
+from app.domains import operation_of, operation_profile
 
 HISTORY_HOURS = 72
 
@@ -29,24 +30,20 @@ DEGRADATION_PROFILES: Dict[str, Dict[str, float]] = {
     "M03": {"vibration_rise": 2.2, "temperature_rise": 8.0, "health_drop": 18.0, "curve": 1.2},
 }
 
-BASE_SIGNALS = {
-    "STAMPING": {"vibration": 2.4, "temperature": 52.0, "current": 38.0},
-    "WELDING": {"vibration": 1.9, "temperature": 58.0, "current": 44.0},
-    "PAINTING": {"vibration": 1.2, "temperature": 46.0, "current": 21.0},
-    "ASSEMBLY": {"vibration": 1.6, "temperature": 41.0, "current": 17.0},
-    "INSPECTION": {"vibration": 0.8, "temperature": 35.0, "current": 9.0},
-}
+FALLBACK_SIGNALS = {"vibration": 1.6, "temperature": 41.0, "current": 17.0}
 
 
-def _operation(machine_type: str) -> str:
-    return machine_type.split("_")[0].upper()
+def _base_signals(machine_type: str) -> dict:
+    """Baseline signals for the machine's operation, defined per operation in the industry packs."""
+    profile = operation_profile(operation_of(machine_type))
+    return profile["signals"] if profile else FALLBACK_SIGNALS
 
 
 def generate_series(machine) -> List[Dict[str, float]]:
     """Hourly telemetry for one machine, oldest first, ending at the plant clock."""
     seed = config.RANDOM_SEED * 1000 + int("".join(ch for ch in machine.machine_id if ch.isdigit()) or 0)
     rng = random.Random(seed)
-    base = BASE_SIGNALS.get(_operation(machine.machine_type), BASE_SIGNALS["ASSEMBLY"])
+    base = _base_signals(machine.machine_type)
     profile = DEGRADATION_PROFILES.get(machine.machine_id)
     status = machine.status.value if hasattr(machine.status, "value") else str(machine.status)
     offline = status in ("DOWN", "MAINTENANCE")

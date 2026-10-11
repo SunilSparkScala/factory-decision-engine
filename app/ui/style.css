@@ -593,3 +593,14 @@ button { cursor: pointer; }
 .progress-step small { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
 .progress-parallel { flex: 1.6; }
 @media (max-width: 860px) { .progress-arrow { display: none; } }
+
+/* industry selector */
+.domain-select { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 12px; }
+.domain-label { color: var(--text-3); font-weight: 500; }
+.domain-select select { border: 0; background: var(--surface-3); color: var(--text); font: inherit; font-weight: 600; padding: 3px 8px; border-radius: 999px; cursor: pointer; }
+.domain-select select:focus-visible { outline: 2px solid var(--primary); }
+@media (max-width: 860px) { .domain-label { display: none; } }
+
+/* keep the header on one row once the industry selector is present */
+@media (max-width: 1500px) { .brand-tagline { display: none; } }
+.header-inner { gap: var(--space-4); }

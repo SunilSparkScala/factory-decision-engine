@@ -19,7 +19,7 @@ source_type: synthetic
 # M05 Robotic Welding Unit 2 — Technical Specifications
 
 ## 1. Overview
-M05 is an automated 6-axis robotic articulation welding cell located at Station A2 on Line A (Sedan Line). It performs structural chassis spot welding for Model-S and Model-E vehicles.
+M05 is an automated 6-axis robotic articulation welding cell located at Station A2 on Line A (Sedan Line). It performs structural chassis spot welding for Aurora and Breeze vehicles.
 
 ## 2. Technical Capabilities
 - **Cycle Time:** 120.0 seconds per sub-assembly

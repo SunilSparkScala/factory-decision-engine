@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.ai.llm import GeminiService
+from app.domains import get_pack
 from app.agent.orchestrator import ScenarioParser
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class ScenarioUnderstanding(BaseModel):
     assumptions: List[str] = Field(default_factory=list, description="Anything inferred rather than stated.")
 
 
-UNDERSTANDING_SYSTEM = """You interpret messages from plant managers and technicians at Apex Automotive Plant 1.
+UNDERSTANDING_SYSTEM = """You interpret messages from plant managers and technicians at the plant named in PLANT.
 Convert the message into the structured scenario schema.
 
 Rules:
@@ -147,7 +148,12 @@ def understand_scenario(
         for m in catalog
     )
     context = f"CURRENT SCENARIO: {current_scenario}\n" if current_scenario else ""
-    request = f"MACHINE CATALOG:\n{catalog_lines}\n\n{context}MESSAGE:\n{prompt}"
+    pack = get_pack()
+    vocabulary = "; ".join(f"{op['code']} = {op['noun']} ({op['display']})" for op in pack["operations"])
+    request = (
+        f"PLANT: {pack['plant']['name']} ({pack['label']})\nMACHINE TYPES: {vocabulary}\n\n"
+        f"MACHINE CATALOG:\n{catalog_lines}\n\n{context}MESSAGE:\n{prompt}"
+    )
 
     result = llm.generate_json(request, ScenarioUnderstanding, system=UNDERSTANDING_SYSTEM)
     if result is None:
@@ -161,7 +167,7 @@ def understand_scenario(
     if machine_id and machine_id not in valid_ids:
         clarification = (
             f"Machine '{machine_id}' is not in the plant registry. "
-            "Which machine is affected? (e.g. M17 - Welding, Line B)"
+            "Which machine is affected? (e.g. M17 on Line B)"
         )
         machine_id = None
     if not machine_id and result.intent == "new_scenario" and not clarification:

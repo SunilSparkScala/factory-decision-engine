@@ -24,7 +24,7 @@ def test_agent_package_imports():
     assert EvidenceItem is not None
     assert CandidatePlanSummary is not None
     assert len(ALL_AGENT_TOOLS) == 6
-    assert "Apex Automotive Plant 1" in AGENT_SYSTEM_INSTRUCTION
+    assert "PLANT:" in AGENT_SYSTEM_INSTRUCTION  # plant name is supplied per request (industry packs)
 
 def test_tool_functions_call_existing_deterministic_engines():
     # 1. get_factory_state

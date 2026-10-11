@@ -26,13 +26,27 @@ flags any number the AI writes that does not appear in the engine's data or the 
 | **Ask about the decision** | "Why not overtime?" or "Explain this to my director": grounded answers with citations. |
 | **Closes the loop** | Approval records an audit entry and drafts the supervisor work order, quality notice, schedule changes and customer update. Nothing is executed automatically. |
 
+## One engine, any factory: industry packs
+
+The same engine runs two synthetic plants, and each viewer can switch with the **Industry**
+selector in the header (their choice is per browser, so viewers don't affect each other):
+
+| Pack | Plant | Lines | Example machine |
+|---|---|---|---|
+| **Electronics** (default) | Northwind Electronics Plant 1, Pune | Routers · Smart speakers · Thermostats | M17 = pick-and-place machine |
+| **Automotive** | Apex Automotive Plant 1, Chennai | Sedan · SUV · Compact | M17 = welding robot |
+
+Both packs share one structure and seed, so every calculation is identical; only the vocabulary,
+the 18 engineering documents (`knowledge/documents/<pack>/`) and the examples differ. Packs are
+defined in `app/domains/packs.py`; the API reads the pack from the `X-FDE-Domain` header.
+
 ## Run locally
 
 ```powershell
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python scripts/generate_data.py            # builds data/generated/factory.db
+python scripts/generate_data.py            # builds one database per industry pack
 copy .env.example .env                     # then paste your Gemini key into .env
 python -m uvicorn app.api:app --env-file .env --port 8000
 ```
@@ -94,12 +108,14 @@ Browser (vanilla JS, no build)          FastAPI (app/api.py)
 | `app/agent/` | Agent pipeline, understanding, specialists, assistant, decision log |
 | `app/simulation/`, `app/recovery/`, `app/evaluation/` | Deterministic engine (source of truth for numbers) |
 | `app/prediction/` | Synthetic telemetry, early-warning trend model, alert inbox |
+| `app/domains/` | Industry packs and per-request pack selection |
 | `app/knowledge/`, `knowledge/documents/` | Engineering knowledge base (SOPs, manuals, incidents) |
 | `app/ui/` | `index.html`, `style.css`, `app.js` entry, `js/` modules (views and helpers) |
 
 ## Honest limits of the prototype
 
-- The plant, its orders, telemetry and documents are **synthetic** (Apex Automotive Plant 1).
+- The plants, their orders, telemetry and documents are **synthetic** (Northwind Electronics Plant 1
+  and Apex Automotive Plant 1); names are fictional.
 - Fault events are scripted ("Simulate incoming fault"); in production they would stream from MES/PLC
   systems (e.g. Pub/Sub). The early-warning model is a transparent trend extrapolation, not a trained model.
 - The simulation simplifies some realities (for example, it does not model labour skills).

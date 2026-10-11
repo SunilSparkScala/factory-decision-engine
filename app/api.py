@@ -10,7 +10,7 @@ import logging
 import threading
 from collections import Counter
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -25,6 +25,8 @@ from app.agent import decision_log
 from app.agent.schemas import DecisionResponse
 from app.ai.llm import model_for, vertex_enabled
 from app.config import config
+from app import domains
+from app.domains.packs import PACKS
 from app.exceptions import UnknownMachineError, InvalidDowntimeError
 
 logger = logging.getLogger("factory_decision_engine.api")
@@ -48,6 +50,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class DomainMiddleware:
+    """
+    Pure ASGI middleware: read the viewer's industry pack from the `X-FDE-Domain` header (or a
+    `domain` query parameter) and set it for this request, so concurrent viewers can use
+    different industries. Pure ASGI (not BaseHTTPMiddleware) keeps the ContextVar visible to
+    the endpoint and its worker thread.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        headers = dict(scope.get("headers") or [])
+        requested = headers.get(b"x-fde-domain", b"").decode("latin-1")
+        if not requested:
+            from urllib.parse import parse_qs
+            requested = (parse_qs(scope.get("query_string", b"").decode("latin-1")).get("domain") or [""])[0]
+        token = domains.set_domain(requested)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            domains.reset_domain(token)
+
+
+app.add_middleware(DomainMiddleware)
 
 @app.middleware("http")
 async def revalidate_ui_assets(request, call_next):
@@ -97,6 +127,17 @@ def health_check():
         "gemini_provider": ("vertex_ai" if vertex_enabled() else "gemini_api") if agent.live_ai else None,
         "default_mode": "live_gemini" if agent.live_ai else "deterministic_fallback",
         "human_approval_policy": "MANDATORY",
+        "domain": domains.current_domain(),
+        "default_domain": domains.DEFAULT_DOMAIN,
+    }
+
+@app.get("/api/domains")
+def list_domains():
+    """Industry packs the viewer can switch between (same engine, different plant)."""
+    return {
+        "default": domains.DEFAULT_DOMAIN,
+        "current": domains.current_domain(),
+        "domains": [domains.public_pack(key) for key in PACKS],
     }
 
 @app.post("/api/analyze", response_model=DecisionResponse)
@@ -201,6 +242,7 @@ def approve_decision(req: ApproveRequest):
     pack = generate_action_documents(agent.llm, req.decision, req.approver.strip(), req.note)
     entry = decision_log.record({
         **pack,
+        "domain": domains.current_domain(),
         "machine_id": req.decision.impact_summary.get("machine_id"),
         "downtime_hours": req.decision.impact_summary.get("downtime_hours"),
         "execution_mode": req.decision.execution_mode,
@@ -262,15 +304,15 @@ def factory_overview():
         "lines": lines,
     }
 
-_watch_list_cache: Optional[list] = None
+_watch_list_cache: Dict[str, list] = {}
 
 def _watch_list() -> list:
-    """Telemetry and plant data are immutable during a run, so the watch list is computed once."""
-    global _watch_list_cache
-    if _watch_list_cache is None:
+    """Telemetry and plant data are immutable during a run, so each pack's watch list is computed once."""
+    domain = domains.current_domain()
+    if domain not in _watch_list_cache:
         from app.prediction.health import get_watch_list
-        _watch_list_cache = get_watch_list()
-    return _watch_list_cache
+        _watch_list_cache[domain] = get_watch_list()
+    return _watch_list_cache[domain]
 
 @app.get("/api/watchlist")
 def watch_list():

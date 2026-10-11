@@ -6,7 +6,8 @@ from pydantic import BaseModel
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 GENERATED_DATA_DIR = DATA_DIR / "generated"
-DB_PATH = GENERATED_DATA_DIR / "factory.db"
+# One database per industry pack; DB_PATH is the default pack's (the active pack is chosen per request)
+DB_PATH = GENERATED_DATA_DIR / f"factory_{os.getenv('FDE_DEFAULT_DOMAIN', 'electronics')}.db"
 
 class Config(BaseModel):
     OPERATING_HOURS_PER_DAY: float = 24.0

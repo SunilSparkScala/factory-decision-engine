@@ -3,7 +3,7 @@
 // All figures shown in the UI come from the API; nothing here is hard-coded.
 
 import { $, $$, toast } from "./js/dom.js";
-import { api } from "./js/api.js";
+import { api, getDomain, setDomain } from "./js/api.js";
 import { state } from "./js/state.js";
 import { plantTime } from "./js/format.js";
 import * as controlRoom from "./js/views/control-room.js";
@@ -67,7 +67,41 @@ function initNav() {
 }
 
 export function setPlantClock(iso) {
-  $("#plant-clock").textContent = `Plant time ${plantTime(iso)}`;
+  $("#plant-clock").textContent = `🕗 ${plantTime(iso)}`;
+}
+
+/**
+ * Industry selector: same engine, different plant. The choice is per viewer (stored locally and
+ * sent as a header), so one judge switching industry never changes another judge's screen.
+ */
+async function initDomains() {
+  const select = $("#domain-select");
+  try {
+    const { domains, default: fallback } = await api.domains();
+    state.domains = domains;
+    // A shareable link may pin the industry: #decide?q=...&domain=automotive
+    const linked = new URLSearchParams(location.hash.split("?")[1] || "").get("domain");
+    const wanted = linked || getDomain();
+    const chosen = domains.some((d) => d.key === wanted) ? wanted : fallback;
+    setDomain(chosen);
+    select.replaceChildren(...domains.map((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.key;
+      opt.textContent = d.label;
+      return opt;
+    }));
+    select.value = chosen;
+    workspace.applyPack(domains.find((d) => d.key === chosen));
+    select.addEventListener("change", async () => {
+      setDomain(select.value);
+      const pack = state.domains.find((d) => d.key === select.value);
+      workspace.applyPack(pack);
+      await controlRoom.reload();
+      toast(`Switched to ${pack.plant.name} (${pack.label})`);
+    });
+  } catch {
+    select.closest(".domain-select").hidden = true;
+  }
 }
 
 async function boot() {
@@ -76,6 +110,7 @@ async function boot() {
   controlRoom.init({ showView, setPlantClock });
   workspace.init({ showView });
   decisionLog.init();
+  await initDomains();
   await initHealth();
   api.overview().then((o) => setPlantClock(o.plant_clock)).catch(() => {});
   // Shareable scenario links: #decide?q=<scenario text> opens the workspace and runs it

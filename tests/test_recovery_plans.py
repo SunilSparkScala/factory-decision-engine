@@ -157,11 +157,11 @@ def test_transfer_fully_compatible():
     from app.models import ProductionOrder, OrderPriority
     from datetime import datetime
     impact = simulate_machine_failure(machine_id="M17", downtime_hours=4.0)
-    # Line C supports Model-C and Model-X. Set all affected orders to Model-C
+    # Line C supports Cruiser and Dash. Set all affected orders to Cruiser
     impact.affected_orders = [
         ProductionOrder(
             order_id="TEST_ORD_01",
-            product_model="Model-C",
+            product_model="Cruiser",
             quantity=10,
             priority=OrderPriority.HIGH,
             due_time=datetime.now(),
@@ -180,11 +180,11 @@ def test_transfer_fully_incompatible():
     from app.models import ProductionOrder, OrderPriority
     from datetime import datetime
     impact = simulate_machine_failure(machine_id="M17", downtime_hours=4.0)
-    # Line A supports Model-S and Model-E, not Model-C. Set order to Model-C
+    # Line A supports Aurora and Breeze, not Cruiser. Set order to Cruiser
     impact.affected_orders = [
         ProductionOrder(
             order_id="TEST_ORD_02",
-            product_model="Model-C",
+            product_model="Cruiser",
             quantity=10,
             priority=OrderPriority.HIGH,
             due_time=datetime.now(),
@@ -196,18 +196,18 @@ def test_transfer_fully_incompatible():
     plan_m04 = next((p for p in plans if p.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER and p.actions[0].target_machine_id == "M04"), None)
     assert plan_m04 is not None
     assert plan_m04.feasibility.is_feasible is False
-    assert any("incompatible with affected order model(s): ['Model-C']" in r for r in plan_m04.feasibility.infeasible_reasons)
+    assert any("incompatible with affected order model(s): ['Cruiser']" in r for r in plan_m04.feasibility.infeasible_reasons)
 
 def test_transfer_mixed_affected_orders():
     """Verify transfer is marked infeasible when only some affected orders are compatible."""
     from app.models import ProductionOrder, OrderPriority
     from datetime import datetime
     impact = simulate_machine_failure(machine_id="M17", downtime_hours=4.0)
-    # Line C supports Model-C and Model-X. Mixed orders: Model-C and Model-E
+    # Line C supports Cruiser and Dash. Mixed orders: Cruiser and Breeze
     impact.affected_orders = [
         ProductionOrder(
             order_id="TEST_ORD_C",
-            product_model="Model-C",
+            product_model="Cruiser",
             quantity=10,
             priority=OrderPriority.HIGH,
             due_time=datetime.now(),
@@ -215,7 +215,7 @@ def test_transfer_mixed_affected_orders():
         ),
         ProductionOrder(
             order_id="TEST_ORD_E",
-            product_model="Model-E",
+            product_model="Breeze",
             quantity=10,
             priority=OrderPriority.HIGH,
             due_time=datetime.now(),
@@ -223,22 +223,22 @@ def test_transfer_mixed_affected_orders():
         ),
     ]
     plans = generate_recovery_plans(impact)
-    # Target M26 on Line C: Model-E is incompatible
+    # Target M26 on Line C: Breeze is incompatible
     plan_m26 = next((p for p in plans if p.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER and p.actions[0].target_machine_id == "M26"), None)
     assert plan_m26 is not None
     assert plan_m26.feasibility.is_feasible is False
-    assert any("incompatible with affected order model(s): ['Model-E']" in r for r in plan_m26.feasibility.infeasible_reasons)
+    assert any("incompatible with affected order model(s): ['Breeze']" in r for r in plan_m26.feasibility.infeasible_reasons)
 
 def test_transfer_m17_to_m26_scenario_with_model_e():
-    """Ensure Model-E orders on M17 are never transferred to Line C machines (e.g. M26)."""
+    """Ensure Breeze orders on M17 are never transferred to Line C machines (e.g. M26)."""
     from app.models import ProductionOrder, OrderPriority
     from datetime import datetime
     impact = simulate_machine_failure(machine_id="M17", downtime_hours=8.0)
-    # Force affected order to Model-E
+    # Force affected order to Breeze
     impact.affected_orders = [
         ProductionOrder(
             order_id="TEST_ORD_E1",
-            product_model="Model-E",
+            product_model="Breeze",
             quantity=15,
             priority=OrderPriority.HIGH,
             due_time=datetime.now(),
@@ -253,5 +253,5 @@ def test_transfer_m17_to_m26_scenario_with_model_e():
     assert len(line_c_transfers) > 0
     for p in line_c_transfers:
         assert p.feasibility.is_feasible is False
-        assert any("incompatible with affected order model(s): ['Model-E']" in r for r in p.feasibility.infeasible_reasons)
+        assert any("incompatible with affected order model(s): ['Breeze']" in r for r in p.feasibility.infeasible_reasons)
 

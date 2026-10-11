@@ -47,7 +47,11 @@
       </nav>
 
       <div class="header-status">
-        <span class="chip chip-clock" id="plant-clock" title="Simulated plant time">Plant time --</span>
+        <label class="domain-select" title="Same engine, different plant: switch the industry">
+          <span class="domain-label">Industry</span>
+          <select id="domain-select" aria-label="Industry"></select>
+        </label>
+        <span class="chip chip-clock" id="plant-clock" title="Simulated plant time (the demo plant runs on its own clock)">🕗 --</span>
         <span class="ai-pill" id="ai-status" role="status" title="AI status">
           <span class="dot"></span><span id="ai-status-text">Checking AI…</span>
         </span>
@@ -143,9 +147,9 @@
           </form>
           <div class="chips" role="group" aria-label="Example scenarios">
             <span class="chips-label">Try:</span>
-            <button class="chip-btn" data-prompt="M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.">M17 down 8 h · protect deliveries, low cost</button>
-            <button class="chip-btn" data-prompt="The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap and no overtime please.">Plain language · 6–10 h · no overtime</button>
-            <button class="chip-btn" data-prompt="The welding robot on line B jammed, probably out till lunch. Don't let customer orders slip.">Vague report · needs clarification</button>
+            <button class="chip-btn" data-example="clear" data-prompt="M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.">M17 down 8 h · protect deliveries, low cost</button>
+            <button class="chip-btn" data-example="plain" data-prompt="The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap and no overtime please.">Plain language · 6–10 h · no overtime</button>
+            <button class="chip-btn" data-example="vague" data-prompt="The welding robot on line B jammed, probably out till lunch. Don't let customer orders slip.">Vague report · needs clarification</button>
             <button class="chip-btn btn-reset" id="btn-reset-demo" title="Restore the canonical demo scenario">↺ Reset Demo</button>
           </div>
 

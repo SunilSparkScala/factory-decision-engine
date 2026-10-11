@@ -18,6 +18,14 @@ export function init(context) {
   });
 }
 
+/** Re-fetch everything (e.g. after the viewer switches industry). */
+export async function reload() {
+  loaded = false;
+  state.alerts = [];
+  state.watch = [];
+  await load();
+}
+
 export async function onShow() {
   if (!loaded) await load();
 }

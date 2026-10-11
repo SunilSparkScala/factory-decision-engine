@@ -195,7 +195,7 @@ def test_api_canonical_scenario_exact_authoritative_values():
     assert data["impact_summary"]["capacity_loss_percentage"] == 17.6
     assert data["impact_summary"]["affected_order_count"] == 6
     assert data["impact_summary"]["high_priority_affected_count"] == 3
-    assert data["impact_summary"]["affected_product_models"] == ["Model-C"]
+    assert data["impact_summary"]["affected_product_models"] == ["Cruiser"]
     assert data["selected_plan"]["plan_id"] == "PLAN_TRANSFER_07"
     assert data["selected_plan"]["target_machine_id"] == "M26"
     assert data["selected_plan"]["weighted_score"] == 0.6881

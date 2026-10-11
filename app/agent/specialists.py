@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from app.ai.llm import compact_json
+from app.domains import get_pack
 from app.config import config
 
 logger = logging.getLogger(__name__)
@@ -201,7 +202,7 @@ def gather_domain_evidence(decision) -> Dict[str, List[Dict[str, Any]]]:
 
 def _specialist_instruction(spec: Dict[str, str]) -> str:
     return (
-        f"You are the {spec['title']} specialist in a factory disruption war room at Apex Automotive Plant 1.\n"
+        f"You are the {spec['title']} specialist in a factory disruption war room at {get_pack()['plant']['name']}.\n"
         f"Review the RECOMMENDED PLAN strictly from your domain: {spec['focus']}\n"
         f"Compare it with the other options only where relevant to your domain.\n{COMMON_RULES}"
     )

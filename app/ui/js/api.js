@@ -1,9 +1,23 @@
 // Every backend call lives here, so the views never build URLs or parse errors themselves.
 
+// Industry pack chosen by this viewer (sent with every request; the server defaults if unset)
+let domain = null;
+try { domain = localStorage.getItem("fde-domain"); } catch { /* storage unavailable */ }
+
+export function getDomain() { return domain; }
+
+export function setDomain(key) {
+  domain = key;
+  try { localStorage.setItem("fde-domain", key); } catch { /* storage unavailable */ }
+}
+
 async function request(method, url, body) {
+  const headers = {};
+  if (body) headers["Content-Type"] = "application/json";
+  if (domain) headers["X-FDE-Domain"] = domain;
   const res = await fetch(url, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   let data = null;
@@ -20,6 +34,7 @@ async function request(method, url, body) {
 
 export const api = {
   health: () => request("GET", "/api/health"),
+  domains: () => request("GET", "/api/domains"),
   overview: () => request("GET", "/api/factory/overview"),
   watchList: () => request("GET", "/api/watchlist"),
   alerts: () => request("GET", "/api/alerts"),

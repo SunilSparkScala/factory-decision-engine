@@ -1,5 +1,9 @@
 import os
 
+# The deterministic regression suite runs on the automotive pack (the original plant layout);
+# set before any app module is imported so config/DB paths resolve to that pack.
+os.environ.setdefault("FDE_DEFAULT_DOMAIN", "automotive")
+
 import pytest
 
 _KEY_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_USE_VERTEXAI")

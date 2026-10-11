@@ -19,7 +19,7 @@ source_type: synthetic
 # M01 Stamping Unit 1 — Technical Manual & Operating Limits
 
 ## 1. Overview
-M01 is a high-speed hydraulic stamping press located at Station A1 on Line A at Apex Automotive Plant 1. It is primarily assigned to Model-S and Model-E structural panel fabrication.
+M01 is a high-speed hydraulic stamping press located at Station A1 on Line A at Apex Automotive Plant 1. It is primarily assigned to Aurora and Breeze structural panel fabrication.
 
 ## 2. Operating Characteristics
 - **Nominal Cycle Time:** 60.0–75.0 seconds per panel
@@ -30,7 +30,7 @@ M01 is a high-speed hydraulic stamping press located at Station A1 on Line A at 
 ## 3. Operational Limits & Restrictions
 - **Continuous Run Limit:** 16 continuous hours without a thermal stabilization pause.
 - **Degraded Operation:** If hydraulic pressure drops below 180 bar, machine health drops below 85% and throughput must be derated by 15%.
-- **Transfer Constraints:** Die changeovers for Model-S to Model-E require a 45-minute setup window.
+- **Transfer Constraints:** Die changeovers for Aurora to Breeze require a 45-minute setup window.
 
 ## 4. Maintenance & Safety Precautions
 - Daily lubrication check required at shift startup.

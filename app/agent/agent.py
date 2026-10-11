@@ -1,3 +1,4 @@
+import contextvars
 import os
 import re
 import logging
@@ -9,6 +10,7 @@ from google.adk import Agent, Runner
 from google.adk.sessions import InMemorySessionService
 from app.ai.llm import GeminiService, chain_for, is_retryable, mark_unavailable, model_for, usable_models, vertex_enabled
 from app.agent.prompts import AGENT_SYSTEM_INSTRUCTION
+from app.domains import current_domain, get_pack, process_override
 from app.agent.tools import (
     ALL_AGENT_TOOLS,
     get_factory_state,
@@ -185,7 +187,9 @@ class FactoryDecisionAgent:
             f"machine_id={imp.get('machine_id')}; downtime_hours={imp.get('downtime_hours')}; "
             f"constraints={', '.join(k for k, v in (decision.applied_constraints or {}).items() if v) or 'none'}"
         )
+        pack = get_pack()
         message = (
+            f"PLANT: {pack['plant']['name']} ({pack['label']})\n"
             f"CURRENT SCENARIO: {scenario_line}\n\n"
             f"CURRENT DECISION (from the deterministic engine):\n{compact_json(context)}\n\n"
             f"EVIDENCE ALREADY RETRIEVED:\n{compact_json(evidence, 4000)}\n\n"
@@ -198,7 +202,10 @@ class FactoryDecisionAgent:
         self.adk_agent.model = model
         session_id = f"ask_{uuid.uuid4().hex[:12]}"
         try:
-            events = list(self.runner.run(user_id="plant_operator", session_id=session_id, new_message=user_msg))
+            # The ADK runner executes tools on its own thread, which doesn't inherit this request's
+            # context; a scoped override keeps tool calls on the viewer's industry pack.
+            with process_override(current_domain()):
+                events = list(self.runner.run(user_id="plant_operator", session_id=session_id, new_message=user_msg))
         except Exception as e:
             if is_retryable(e):
                 mark_unavailable(model, e)
@@ -256,7 +263,7 @@ class FactoryDecisionAgent:
 
         cache_key = None
         if self.llm_available:
-            cache_key = (" ".join(prompt.lower().split()), repr(self._scenario_context()))
+            cache_key = (current_domain(), " ".join(prompt.lower().split()), repr(self._scenario_context()))
             cached = self._cache_get(cache_key)
             if cached is not None:
                 if cached.selected_plan is not None and not cached.clarification_needed:
@@ -342,7 +349,7 @@ class FactoryDecisionAgent:
         war_room = None
         if self.llm_available and decision.selected_plan is not None:
             with ThreadPoolExecutor(max_workers=1) as pool:
-                war_room = self._collect_war_room(pool.submit(run_war_room_resilient, decision, decision.robustness))
+                war_room = self._collect_war_room(pool.submit(contextvars.copy_context().run, run_war_room_resilient, decision, decision.robustness))
 
         result = self._enrich(decision, understood, components, war_room=war_room)
         if result.ai_components.get("understanding") != "gemini" and result.ai_components.get("war_room") != "gemini":
@@ -403,7 +410,7 @@ class FactoryDecisionAgent:
             res.ai_components = dict(res.ai_components or {}, war_room="skipped")
             return res
         with ThreadPoolExecutor(max_workers=1) as pool:
-            war_room = self._collect_war_room(pool.submit(run_war_room_resilient, res, res.robustness))
+            war_room = self._collect_war_room(pool.submit(contextvars.copy_context().run, run_war_room_resilient, res, res.robustness))
         comps = dict(res.ai_components or {})
         if war_room in (None, "failed"):
             comps["war_room"] = "failed"
@@ -485,7 +492,7 @@ class FactoryDecisionAgent:
         war_room = None
         if self.llm_available and res.selected_plan is not None:
             with ThreadPoolExecutor(max_workers=1) as pool:
-                war_room = self._collect_war_room(pool.submit(run_war_room_resilient, res, res.robustness))
+                war_room = self._collect_war_room(pool.submit(contextvars.copy_context().run, run_war_room_resilient, res, res.robustness))
         return self._enrich(res, understood, components, war_room=war_room)
 
     def _answer_in_context(self, prompt: str, interpretation, components: Dict[str, str]) -> DecisionResponse:

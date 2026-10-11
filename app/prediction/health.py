@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from app.domains import operation_of, operation_profile
+
 from app.prediction.telemetry import (
     HEALTH_FAILURE_THRESHOLD,
     TEMPERATURE_ALARM_C,
@@ -21,14 +23,13 @@ from app.prediction.telemetry import (
 TREND_WINDOW_HOURS = 24
 HORIZON_HOURS = 168
 
-# Synthetic typical repair durations by operation type (hours), used to size pre-built plans
-TYPICAL_REPAIR_HOURS = {
-    "STAMPING": (4.0, 8.0),
-    "WELDING": (6.0, 10.0),
-    "PAINTING": (5.0, 9.0),
-    "ASSEMBLY": (3.0, 6.0),
-    "INSPECTION": (2.0, 4.0),
-}
+DEFAULT_REPAIR_HOURS = (4.0, 8.0)
+
+
+def typical_repair_hours(op_code: str):
+    """Synthetic typical repair durations (hours) per operation, defined in the industry packs."""
+    profile = operation_profile(op_code)
+    return tuple(profile["repair_hours"]) if profile else DEFAULT_REPAIR_HOURS
 
 SIGNALS = [
     # key, label, threshold, direction (+1 rising is bad, -1 falling is bad), unit
@@ -69,7 +70,7 @@ def _risk_level(eta: Optional[float]) -> str:
 def assess_machine(machine) -> Dict[str, Any]:
     status = machine.status.value if hasattr(machine.status, "value") else str(machine.status)
     series = generate_series(machine)
-    op = machine.machine_type.split("_")[0].upper()
+    op = operation_of(machine.machine_type)
     signals = {}
     for key, label, threshold, direction, unit in SIGNALS:
         res = _hours_to_threshold([p[key] for p in series], threshold, direction)
@@ -106,7 +107,7 @@ def assess_machine(machine) -> Dict[str, Any]:
         "driver_signal": signals[driver]["label"] if driver else None,
         "explanation": explanation,
         "signals": signals,
-        "typical_repair_hours": list(TYPICAL_REPAIR_HOURS.get(op, (4.0, 8.0))),
+        "typical_repair_hours": list(typical_repair_hours(op)),
         "sparkline": [p["vibration_mm_s"] for p in series[-48:]],
     }
 
