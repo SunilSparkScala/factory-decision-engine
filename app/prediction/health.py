@@ -2,11 +2,14 @@
 Early-warning model and machine watch list.
 
 A transparent, trend-based model (not a trained ML model): for each running machine it fits a
-linear trend to the last 24 hours of vibration, temperature and health, extrapolates the time
-until each signal crosses its alarm threshold, and reports the earliest crossing as the
-estimated time-to-alarm. High-risk machines get a pre-built backup plan from the deterministic
+trend to the last 24 hours of vibration, temperature and health, extrapolates the time until
+each signal crosses its alarm threshold, and reports the earliest crossing as the estimated
+time-to-alarm. The trend is a straight line, or a curve when wear is clearly accelerating (a
+quadratic that is worsening and fits markedly better). The range comes from the readings'
+noise: when the trend reaches the alarm level minus/plus two standard deviations of the residuals. High-risk machines get a pre-built backup plan from the deterministic
 decision engine, so the plant has a plan before anything breaks.
 """
+import math
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -39,20 +42,54 @@ SIGNALS = [
 ]
 
 
-def _hours_to_threshold(values: List[float], threshold: float, direction: int) -> Dict[str, Optional[float]]:
+QUADRATIC_MIN_GAIN = 0.2   # the curve must cut the residual error by at least 20%
+NOISE_BAND_SIGMAS = 2.0
+
+
+def _crossing(coefs: np.ndarray, level: float, x_now: float) -> Optional[float]:
+    """Hours from x_now until the fitted trend first reaches `level` (None if not within the horizon)."""
+    roots = (np.poly1d(coefs) - level).roots
+    ahead = [r.real - x_now for r in np.atleast_1d(roots) if abs(r.imag) < 1e-9 and r.real > x_now]
+    eta = min(ahead) if ahead else None
+    return eta if eta is not None and eta <= HORIZON_HOURS else None
+
+
+def _hours_to_threshold(values: List[float], threshold: float, direction: int) -> Dict[str, Any]:
     y = np.asarray(values[-TREND_WINDOW_HOURS:], dtype=float)
     x = np.arange(len(y), dtype=float)
-    slope, intercept = np.polyfit(x, y, 1)
-    current = float(intercept + slope * x[-1])
-    worsening = slope * direction
-    if (current - threshold) * direction >= 0:
-        eta = 0.0
-    elif worsening <= 1e-6:
-        eta = None
-    else:
-        eta = abs(threshold - current) / abs(slope)
-        eta = eta if eta <= HORIZON_HOURS else None
-    return {"current": round(current, 2), "slope_per_hour": round(float(slope), 4), "hours_to_threshold": None if eta is None else round(eta, 1)}
+    x_now = x[-1]
+    linear = np.polyfit(x, y, 1)
+    coefs, model = linear, "linear"
+    if len(y) >= 8:
+        quad = np.polyfit(x, y, 2)
+        rss_lin = float(np.sum((y - np.polyval(linear, x)) ** 2))
+        rss_quad = float(np.sum((y - np.polyval(quad, x)) ** 2))
+        accelerating = quad[0] * direction > 0 and np.polyval(np.polyder(quad), x_now) * direction > 0
+        if accelerating and rss_quad < (1 - QUADRATIC_MIN_GAIN) * rss_lin:
+            coefs, model = quad, "quadratic"
+    fitted = np.polyval(coefs, x)
+    current = float(fitted[-1])
+    slope = float(np.polyval(np.polyder(coefs), x_now))
+    sigma = float(np.sqrt(np.sum((y - fitted) ** 2) / max(1, len(y) - len(coefs))))
+
+    def eta_to(level: float) -> Optional[float]:
+        if (current - level) * direction >= 0:
+            return 0.0
+        if model == "linear" and slope * direction <= 1e-6:
+            return None
+        return _crossing(coefs, level, x_now)
+
+    eta = eta_to(threshold)
+    band = NOISE_BAND_SIGMAS * sigma * direction
+    eta_range = None if eta is None else [eta_to(threshold - band), eta_to(threshold + band)]
+    rnd = lambda v: None if v is None else round(float(v), 1)
+    return {
+        "current": round(current, 2),
+        "slope_per_hour": round(slope, 4),
+        "hours_to_threshold": rnd(eta),
+        "hours_range": None if eta_range is None else [rnd(v) for v in eta_range],
+        "model": model,
+    }
 
 
 def _risk_level(eta: Optional[float]) -> str:
@@ -89,7 +126,8 @@ def assess_machine(machine) -> Dict[str, Any]:
         explanation = (
             f"{s['label']} {trend} at {abs(s['slope_per_hour']):.3f} {s['unit']}/h "
             f"(now {s['current']:g} {s['unit']}, alarm {s['threshold']:g} {s['unit']}); "
-            f"projected to reach the alarm level in about {eta:g} h."
+            f"projected to reach the alarm level in about {eta:g} h "
+            f"({_range_text(s['hours_range'])}{'accelerating curve' if s['model'] == 'quadratic' else 'straight-line'} trend)."
         )
     else:
         explanation = "All signals stable; no alarm projected within 7 days."
@@ -104,12 +142,25 @@ def assess_machine(machine) -> Dict[str, Any]:
         "health_score": machine.health_score,
         "risk_level": risk,
         "hours_to_alarm": eta,
+        "hours_to_alarm_range": signals[driver]["hours_range"] if driver else None,
+        "trend_model": signals[driver]["model"] if driver else None,
         "driver_signal": signals[driver]["label"] if driver else None,
         "explanation": explanation,
         "signals": signals,
         "typical_repair_hours": list(typical_repair_hours(op)),
         "sparkline": [p["vibration_mm_s"] for p in series[-48:]],
     }
+
+
+def _range_text(r) -> str:
+    """ "likely 16–18 h, " for the explanation (empty when the range adds nothing)."""
+    if not r or r[0] is None:
+        return ""
+    half_up = lambda v: int(math.floor(v + 0.5))  # same rounding as the UI
+    lo, hi = r
+    if hi is None:
+        return f"at least {half_up(lo)} h, "
+    return "" if half_up(lo) == half_up(hi) else f"likely {half_up(lo)}–{half_up(hi)} h, "
 
 
 RISK_ORDER = {"CRITICAL": 0, "HIGH": 1, "ELEVATED": 2, "OFFLINE": 3, "NORMAL": 4}

@@ -9,6 +9,7 @@ import { plantTime, setOperationNames } from "./js/format.js";
 import * as controlRoom from "./js/views/control-room.js";
 import * as workspace from "./js/views/workspace.js";
 import * as decisionLog from "./js/views/decision-log.js";
+import { startTour, tourDone } from "./js/components/tour.js";
 
 const VIEWS = {
   control: { el: "#view-control", onShow: controlRoom.onShow },
@@ -108,9 +109,29 @@ async function initDomains() {
   }
 }
 
+/** Wait until the Control Room has rendered (or give up after a few seconds). */
+async function controlRoomReady(timeout = 15000) {
+  const start = Date.now();
+  while (!document.querySelector(".health-group") || !document.querySelector(".alert-item, #alert-list .empty-note")) {
+    if (Date.now() - start > timeout) return false;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return true;
+}
+
+async function openTour() {
+  showView("control");
+  await controlRoomReady();
+  startTour({
+    plantName: state.overview?.plant?.name || "your plant",
+    onTryIt: controlRoom.analyzeTopPrediction,
+  });
+}
+
 async function boot() {
   initTheme();
   initNav();
+  $("#btn-tour").addEventListener("click", openTour);
   controlRoom.init({ showView, setPlantClock });
   workspace.init({ showView });
   decisionLog.init();
@@ -122,6 +143,8 @@ async function boot() {
   showView(view || "control");
   const q = new URLSearchParams(query || "").get("q");
   if (view === "decide" && q) workspace.analyze(q, { fresh: true });
+  // First visit to the Control Room: offer the guided tour (shared scenario links skip it)
+  else if ((view || "control") === "control" && !tourDone()) openTour();
 }
 
 boot();

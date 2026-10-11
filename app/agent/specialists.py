@@ -149,6 +149,13 @@ def build_decision_context(decision, robustness: Optional[Dict[str, Any]] = None
             by_strategy[p.strategy_type] = p
     delivery_scores = [p.delivery_delay_score for p in decision.feasible_alternatives if p.delivery_delay_score is not None]
     best_delivery = min(delivery_scores) if delivery_scores else None
+    # The next-best plans overall, so specialists can see close alternatives of the same strategy
+    # (e.g. another transfer target) that "best per strategy" hides.
+    selected_id = decision.selected_plan.plan_id if decision.selected_plan else None
+    runners_up = sorted(
+        (p for p in decision.feasible_alternatives if p.plan_id != selected_id),
+        key=lambda p: -(p.weighted_score or 0),
+    )[:2]
     return {
         "scenario": decision.scenario_summary,
         "asset_chain": decision.dependency_chain.get("trace_summary"),
@@ -158,6 +165,7 @@ def build_decision_context(decision, robustness: Optional[Dict[str, Any]] = None
         "affected_orders": decision.affected_orders,
         "recommended_plan": _plan_view(decision.selected_plan, best_delivery) if decision.selected_plan else None,
         "best_option_per_strategy": {k: _plan_view(v, best_delivery) for k, v in by_strategy.items()},
+        "runner_up_plans": [_plan_view(p, best_delivery) for p in runners_up],
         "infeasible_options": [
             {"plan_id": p.plan_id, "why": p.infeasibility_reasons} for p in decision.infeasible_alternatives
         ],

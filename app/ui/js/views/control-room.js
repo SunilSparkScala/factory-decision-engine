@@ -168,6 +168,12 @@ function renderAlerts(newId) {
   if (newId) document.getElementById(`alert-${newId}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+/** Open the top predictive alert (the tour's "Try it now"). */
+export function analyzeTopPrediction() {
+  const alert = state.alerts.find((a) => a.kind === "predictive");
+  if (alert) analyzeAlert(alert);
+}
+
 function analyzeAlert(alert) {
   if (!alert.analysis_prompt) return;
   ctx.showView("decide");
@@ -230,6 +236,14 @@ function jumpToAlert(machineId, e) {
   el.classList.add("alert-new");
 }
 
+/** "16–18 h" under the estimate; nothing when the range rounds to the estimate itself. */
+function etaRange(range) {
+  if (!range || range[0] === null) return null;
+  const [lo, hi] = range.map((v) => (v === null ? null : Math.round(v)));
+  if (hi === null) return h("span", { class: "eta-range" }, `≥ ${lo} h`);
+  return lo === hi ? null : h("span", { class: "eta-range" }, `${lo}–${hi} h`);
+}
+
 function renderWatchList() {
   const list = $("#watch-list");
   const items = state.watch.filter((w) => w.risk_level !== "OFFLINE");
@@ -260,7 +274,13 @@ function renderWatchList() {
             : null),
         h("div", { class: "watch-sub" }, `${machineTypeLabel(w.machine_type)} · ${lineName(w.line_id)} · ${w.driver_signal || ""} trend`)),
       sparkline(w.sparkline, vib.threshold),
-      h("div", { class: "watch-eta" }, h("strong", {}, w.hours_to_alarm !== null ? `~${num(w.hours_to_alarm)} h` : "—"), "to alarm"));
+      h("div", {
+        class: "watch-eta",
+        title: w.trend_model ? `${w.trend_model === "quadratic" ? "Accelerating-curve" : "Straight-line"} trend on the last 24 h; range from sensor noise` : null,
+      },
+        h("strong", {}, w.hours_to_alarm !== null ? `~${num(w.hours_to_alarm)} h` : "—"),
+        etaRange(w.hours_to_alarm_range),
+        "to alarm"));
 
     body.append(
       h("p", {}, w.explanation),

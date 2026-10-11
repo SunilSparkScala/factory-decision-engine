@@ -218,7 +218,7 @@ def test_ui_modules_served():
     for path in ["/static/app.js", "/static/js/api.js", "/static/js/dom.js", "/static/js/format.js",
                  "/static/js/state.js", "/static/js/views/control-room.js",
                  "/static/js/views/workspace.js", "/static/js/views/decision-log.js",
-                 "/static/js/components/plant-map.js"]:
+                 "/static/js/components/plant-map.js", "/static/js/components/tour.js"]:
         assert client.get(path).status_code == 200, path
 
 def test_ui_reset_demo_and_tooltip_elements():

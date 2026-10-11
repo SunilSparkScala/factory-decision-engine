@@ -282,6 +282,7 @@ button { cursor: pointer; }
 .watch-sub { font-size: 12px; color: var(--text-3); }
 .watch-eta { text-align: right; font-size: 12px; color: var(--text-2); }
 .watch-eta strong { display: block; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+.watch-eta .eta-range { display: block; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .watch-body { padding: 0 12px 12px; font-size: 13px; color: var(--text-2); display: flex; flex-direction: column; gap: 10px; }
 .prebuilt { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 10px 12px; background: var(--surface); }
 .prebuilt-title { font-size: 12px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -705,3 +706,28 @@ button { cursor: pointer; }
   .quick-report { flex-wrap: wrap; }
   .quick-report input { flex-basis: 100%; }
 }
+
+/* ---------- guided tour ---------- */
+#btn-tour { font-weight: 700; font-size: 15px; }
+.tour-layer { position: fixed; inset: 0; z-index: 60; }
+.tour-spot {
+  position: fixed; border-radius: 12px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55), 0 0 0 3px var(--primary);
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+.tour-spot.centered { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55); }
+.tour-bubble {
+  position: fixed; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 16px 18px 14px;
+  animation: fade-in 0.15s ease;
+}
+.tour-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.tour-count { font-size: 12px; color: var(--text-3); font-weight: 600; }
+.tour-title { font-size: 16px; margin: 0 0 6px; }
+.tour-text { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+.tour-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tour-buttons { display: flex; gap: 8px; margin-left: auto; }
+.tour-dots { display: flex; gap: 5px; }
+.tour-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong); }
+.tour-dots span.on { background: var(--primary); width: 16px; border-radius: 3px; }
+@media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } .tour-bubble { animation: none; } }

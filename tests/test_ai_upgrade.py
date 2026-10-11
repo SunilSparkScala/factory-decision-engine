@@ -123,6 +123,27 @@ def test_hours_to_threshold_on_linear_series():
     assert res["hours_to_threshold"] == pytest.approx(22.0, abs=0.2)
     assert _hours_to_threshold([50.0] * 30, 7.1, 1)["hours_to_threshold"] == 0.0
     assert _hours_to_threshold([3.0] * 30, 7.1, 1)["hours_to_threshold"] is None
+    assert res["model"] == "linear"
+
+
+def test_accelerating_wear_uses_curve_and_is_sooner_than_a_line():
+    import numpy as np
+    series = list(2.0 + 0.004 * np.arange(30) ** 2)  # wear speeding up
+    res = _hours_to_threshold(series, 7.1, 1)
+    window = np.arange(24)
+    line_slope = np.polyfit(window, series[-24:], 1)[0]
+    line_eta = (7.1 - np.polyval(np.polyfit(window, series[-24:], 1), 23)) / line_slope
+    assert res["model"] == "quadratic"
+    assert res["hours_to_threshold"] < line_eta
+
+
+def test_noisy_series_gets_a_range_around_the_estimate():
+    import random
+    rng = random.Random(1)
+    series = [2.0 + 0.1 * i + rng.gauss(0, 0.1) for i in range(30)]
+    res = _hours_to_threshold(series, 7.1, 1)
+    lo, hi = res["hours_range"]
+    assert lo < res["hours_to_threshold"] < hi
 
 
 def test_watch_list_surfaces_hidden_risk_first():
@@ -132,6 +153,8 @@ def test_watch_list_surfaces_hidden_risk_first():
     assert top["status"] == "HEALTHY"
     assert top["risk_level"] in ("HIGH", "CRITICAL")
     assert 5 < top["hours_to_alarm"] < 36
+    lo, hi = top["hours_to_alarm_range"]
+    assert lo <= top["hours_to_alarm"] <= hi
     assert top["prebuilt_plan"]["plan_id"] is not None
     assert all(a["risk_level"] != "NORMAL" for a in wl)
 
@@ -304,3 +327,16 @@ def test_war_room_objections_and_dependencies(monkeypatch):
     assert [(d["from_agent"], d["to_agent"]) for d in brief["dependencies"]] == [("quality", "production")]
     assert brief["conflicts"] == ["Maintenance opposes while Production supports."]
     assert brief["specialist_consensus"] == "4 specialists reviewed: 2 support, 1 support with conditions, 1 oppose."
+
+
+def test_war_room_context_includes_runner_up_plans():
+    from app.agent.specialists import build_decision_context
+
+    decision = DecisionOrchestrator().orchestrate("M17", 8.0, "delivery cost")
+    ctx = build_decision_context(decision)
+    runners = ctx["runner_up_plans"]
+    assert len(runners) == 2
+    assert all(r["plan_id"] != decision.selected_plan.plan_id for r in runners)
+    others = sorted((p for p in decision.feasible_alternatives if p.plan_id != decision.selected_plan.plan_id),
+                    key=lambda p: -(p.weighted_score or 0))
+    assert [r["plan_id"] for r in runners] == [p.plan_id for p in others[:2]]
