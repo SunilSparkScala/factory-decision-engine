@@ -163,9 +163,9 @@ def test_ui_index_html_served():
     """Verify GET / serves index.html with neutral placeholders."""
     res = client.get("/")
     assert res.status_code == 200
-    assert "FACTORY DECISION ENGINE" in res.text
+    assert "Factory Decision Engine" in res.text
     assert "Before you change the factory, understand what happens next." in res.text
-    assert "HUMAN APPROVAL REQUIRED: YES" in res.text
+    assert "Human approval required." in res.text
     assert "PLAN_--" in res.text
     assert "Waiting for analysis..." in res.text
     assert "rec_transfer_m26" not in res.text
@@ -195,22 +195,31 @@ def test_api_canonical_scenario_exact_authoritative_values():
     assert data["impact_summary"]["capacity_loss_percentage"] == 17.6
     assert data["impact_summary"]["affected_order_count"] == 6
     assert data["impact_summary"]["high_priority_affected_count"] == 3
-    assert data["impact_summary"]["affected_product_models"] == ["Model-C"]
+    assert data["impact_summary"]["affected_product_models"] == ["Cruiser"]
     assert data["selected_plan"]["plan_id"] == "PLAN_TRANSFER_07"
     assert data["selected_plan"]["target_machine_id"] == "M26"
     assert data["selected_plan"]["weighted_score"] == 0.6881
     assert data["selected_plan"]["cost_impact_usd"] == 100.0
 
 def test_ui_app_js_source_hygiene():
-    """Verify app.js does not contain fabricated fallback values."""
+    """Verify the UI scripts do not contain fabricated fallback values."""
     from pathlib import Path
-    app_js_path = Path(__file__).resolve().parent.parent / "app" / "ui" / "app.js"
-    assert app_js_path.exists()
-    content = app_js_path.read_text(encoding="utf-8")
-    assert '"240.0"' not in content
-    assert '"0.7850"' not in content
-    assert '"Model-B"' not in content
-    assert "rec_transfer_m26" not in content
+    ui_dir = Path(__file__).resolve().parent.parent / "app" / "ui"
+    assert (ui_dir / "app.js").exists()
+    for js in [ui_dir / "app.js", *sorted((ui_dir / "js").rglob("*.js"))]:
+        content = js.read_text(encoding="utf-8")
+        assert '"240.0"' not in content, js
+        assert '"0.7850"' not in content, js
+        assert '"Model-B"' not in content, js
+        assert "rec_transfer_m26" not in content, js
+
+def test_ui_modules_served():
+    """Every ES module imported by the UI is served by the static mount."""
+    for path in ["/static/app.js", "/static/js/api.js", "/static/js/dom.js", "/static/js/format.js",
+                 "/static/js/state.js", "/static/js/views/control-room.js",
+                 "/static/js/views/workspace.js", "/static/js/views/decision-log.js",
+                 "/static/js/components/plant-map.js", "/static/js/components/tour.js"]:
+        assert client.get(path).status_code == 200, path
 
 def test_ui_reset_demo_and_tooltip_elements():
     """

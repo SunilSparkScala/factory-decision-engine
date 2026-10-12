@@ -20,7 +20,7 @@ source_type: synthetic
 # M17 Heavy Duty Welding Cell — Operating Characteristics & Constraints
 
 ## 1. Description & Location
-M17 is a heavy-duty multi-robot welding cell stationed at Station B2 (Line B, SUV Line). It is configured for heavy frame joining for Model-E and Model-C SUV chassis assemblies.
+M17 is a heavy-duty multi-robot welding cell stationed at Station B2 (Line B, SUV Line). It is configured for heavy frame joining for Breeze and Cruiser SUV chassis assemblies.
 
 ## 2. Key Performance Metrics
 - **Nominal Capacity:** 38.6–42.5 units/hour

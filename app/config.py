@@ -1,11 +1,13 @@
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 GENERATED_DATA_DIR = DATA_DIR / "generated"
-DB_PATH = GENERATED_DATA_DIR / "factory.db"
+# One database per industry pack; DB_PATH is the default pack's (the active pack is chosen per request)
+DB_PATH = GENERATED_DATA_DIR / f"factory_{os.getenv('FDE_DEFAULT_DOMAIN', 'electronics')}.db"
 
 class Config(BaseModel):
     OPERATING_HOURS_PER_DAY: float = 24.0
@@ -30,6 +32,9 @@ class Config(BaseModel):
     NUM_ORDERS: int = 50
     NUM_MATERIALS: int = 25
     NUM_SUPPLIERS: int = 15
+
+    # Simulated "now" for the synthetic plant (matches the generator's base time)
+    PLANT_CLOCK: datetime = datetime(2026, 10, 1, 8, 0, 0, tzinfo=timezone.utc)
 
     DB_PATH: Path = DB_PATH
     GENERATED_DATA_DIR: Path = GENERATED_DATA_DIR

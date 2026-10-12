@@ -1,6 +1,10 @@
 import sys
 import argparse
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from app.agent import FactoryDecisionAgent
 
 def main():

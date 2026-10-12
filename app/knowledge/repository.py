@@ -274,14 +274,16 @@ class KnowledgeRepository:
             min_score=min_score,
         )
 
-# Module-level singleton helper and tool function
-_default_repo: Optional[KnowledgeRepository] = None
+# One cached repository per industry pack
+_repos: Dict[str, KnowledgeRepository] = {}
 
 def get_knowledge_repository() -> KnowledgeRepository:
-    global _default_repo
-    if _default_repo is None:
-        _default_repo = KnowledgeRepository()
-    return _default_repo
+    from app.domains import current_domain
+
+    domain = current_domain()
+    if domain not in _repos:
+        _repos[domain] = KnowledgeRepository()
+    return _repos[domain]
 
 def search_engineering_knowledge(
     query: Optional[str] = None,

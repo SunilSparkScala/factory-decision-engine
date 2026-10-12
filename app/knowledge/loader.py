@@ -1,7 +1,7 @@
 import os
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import yaml
 
 from app.knowledge.models import KnowledgeDocument
@@ -43,8 +43,9 @@ def load_knowledge_documents(documents_dir: Optional[Path] = None) -> List[Knowl
     Discover and load all Markdown knowledge documents under the specified directory.
     """
     if documents_dir is None:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        documents_dir = base_dir / "knowledge" / "documents"
+        # Each industry pack has its own document set (knowledge/documents/<pack>/)
+        from app.domains import knowledge_dir_for
+        documents_dir = knowledge_dir_for()
         
     if not documents_dir.exists():
         logger.warning(f"Knowledge documents directory {documents_dir} does not exist.")

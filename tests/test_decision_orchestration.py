@@ -200,12 +200,12 @@ def test_what_if_disallow_cross_line_transfers():
 
 def test_model_compatibility_enforced_in_transfer():
     """
-    Test 8: Line C model compatibility. Line C only supports Model-A, Model-C, Model-E.
+    Test 8: Line C model compatibility. Line C only supports Model-A, Cruiser, Breeze.
     Model-B orders on Line B cannot be transferred to Line C.
     """
     orchestrator = DecisionOrchestrator()
     resp = orchestrator.orchestrate("M17", 8.0)
-    # Target machine M26 is on LINE_C. M17 produces Model-C orders, which LINE_C supports!
+    # Target machine M26 is on LINE_C. M17 produces Cruiser orders, which LINE_C supports!
     m26_plan = next((p for p in resp.candidate_plans if p.target_machine_id == "M26"), None)
     assert m26_plan is not None
     assert m26_plan.is_feasible is True
