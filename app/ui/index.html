@@ -23,18 +23,12 @@
   <a class="skip-link" href="#main">Skip to content</a>
 
   <!-- =========================================================================
-       EXPERIENCE A: CINEMATIC INDUSTRIAL HERO LANDING PAGE
+       EXPERIENCE A: CINEMATIC INDUSTRIAL HERO LANDING PAGE (SPLIT NON-OVERLAPPING)
        ========================================================================= -->
   <section class="view view-landing" id="view-landing" aria-label="Product Landing">
-    <!-- Background Industrial Video & Fallback Poster -->
-    <div class="hero-media-wrapper" aria-hidden="true">
-      <video id="hero-video" class="hero-bg-video" autoplay muted loop playsinline poster="/static/assets/hero_poster.jpg">
-        <source src="/static/assets/hero_industrial.webm" type="video/webm">
-      </video>
-      <div class="hero-poster-fallback" id="hero-poster"></div>
-      <div class="hero-vignette"></div>
+    <!-- Ambient Subtle Background Grid -->
+    <div class="hero-bg-backdrop" aria-hidden="true">
       <div class="hero-grid-lines"></div>
-      <div class="hero-scan-beam"></div>
     </div>
 
     <!-- Landing Navigation -->
@@ -68,68 +62,117 @@
       </nav>
     </header>
 
-    <!-- Main Cinematic Hero Content -->
-    <div class="landing-hero-content">
-      <div class="hero-badge-eyebrow">
-        <span class="eyebrow-dot"></span>
-        <span class="eyebrow-text">INDUSTRIAL DECISION INTELLIGENCE</span>
-      </div>
+    <!-- Split Hero: Live Video on Left, Narrative & Decisions on Right -->
+    <div class="landing-hero-split-container">
+      <div class="landing-hero-grid">
+        <!-- LEFT COLUMN: Live Industrial Plant Digital Twin / Vision Feed -->
+        <div class="hero-video-pane">
+          <div class="monitor-frame">
+            <div class="monitor-header">
+              <div class="monitor-badge-live">
+                <span class="live-rec-dot"></span>
+                <span>LIVE FEED · SMT LINE B</span>
+              </div>
+              <div class="monitor-meta">
+                <span class="meta-tag">CAM 02 / STA_B2</span>
+                <span class="meta-dot">·</span>
+                <span class="meta-tag">60 FPS</span>
+              </div>
+            </div>
 
-      <h1 class="hero-headline">
-        Before you change the factory, understand what happens next.
-      </h1>
+            <div class="monitor-viewport">
+              <video id="hero-video" class="hero-feed-video" autoplay muted loop playsinline poster="/static/assets/hero_poster.jpg">
+                <source src="/static/assets/hero_industrial.webm" type="video/webm">
+              </video>
+              <div class="hero-poster-fallback" id="hero-poster"></div>
+              <div class="hero-scan-beam"></div>
+              <div class="monitor-reticle tl"></div>
+              <div class="monitor-reticle tr"></div>
+              <div class="monitor-reticle bl"></div>
+              <div class="monitor-reticle br"></div>
+            </div>
 
-      <p class="hero-statement">
-        Turn production disruptions into explainable recovery decisions with operational impact analysis, feasible alternatives, and engineering evidence.
-      </p>
-
-      <div class="hero-cta-group">
-        <button type="button" class="btn btn-primary btn-xl" id="btn-enter-workspace">
-          <span>Enter Decision Studio</span>
-          <span class="btn-icon" aria-hidden="true">→</span>
-        </button>
-        <button type="button" class="btn btn-outline btn-xl" id="btn-explore-modal">
-          <span>Explore how it works</span>
-          <span class="btn-icon" aria-hidden="true">ⓘ</span>
-        </button>
-        <button type="button" class="btn btn-ghost btn-xl chip-quick-canonical" id="btn-launch-m17" title="Directly simulate the canonical M17 pick-and-place outage">
-          <span class="pulse-dot"></span>
-          <span>Simulate M17 8h disruption</span>
-        </button>
-      </div>
-
-      <!-- Real-time Factory Floor Telemetry Stream Ticker -->
-      <div class="landing-ticker-strip" aria-label="Real-time plant telemetry">
-        <div class="ticker-badge">
-          <span class="ticker-live-dot"></span>
-          <span>LIVE TELEMETRY</span>
+            <div class="monitor-footer">
+              <div class="feed-stat">
+                <span class="stat-lbl">MONITORED UNIT:</span>
+                <strong class="stat-val">SMT-M17 Pick &amp; Place</strong>
+              </div>
+              <div class="feed-stat">
+                <span class="stat-lbl">CYCLE TIME:</span>
+                <strong class="stat-val highlight">1.42s</strong>
+              </div>
+              <div class="feed-stat">
+                <span class="stat-lbl">FEED HEALTH:</span>
+                <span class="feed-pill-ok">NOMINAL</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="ticker-marquee-wrap">
-          <div class="ticker-track">
-            <span class="ticker-item"><strong class="t-line">SMT LINE B:</strong> Speed 1.42s/cycle · 98.4% OEE</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">STATION B2:</strong> Pick-and-Place M17 Telemetry Active · 42°C</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">OPTIMIZER:</strong> Deterministic Physics Engine Online · 0ms Cache Latency</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">WAR ROOM:</strong> 4 Specialist Agents Standing By (Prod · Qty · Maint · Energy)</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">POLICY:</strong> Human Dispatch Authorization Required · Audit Logging Enabled</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">SMT LINE B:</strong> Speed 1.42s/cycle · 98.4% OEE</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">STATION B2:</strong> Pick-and-Place M17 Telemetry Active · 42°C</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">OPTIMIZER:</strong> Deterministic Physics Engine Online · 0ms Cache Latency</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">WAR ROOM:</strong> 4 Specialist Agents Standing By (Prod · Qty · Maint · Energy)</span>
-            <span class="ticker-sep">/</span>
-            <span class="ticker-item"><strong class="t-line">POLICY:</strong> Human Dispatch Authorization Required · Audit Logging Enabled</span>
+
+        <!-- RIGHT COLUMN: Decision Intelligence Engine Narrative & CTAs -->
+        <div class="hero-content-pane">
+          <div class="hero-badge-eyebrow">
+            <span class="eyebrow-dot"></span>
+            <span class="eyebrow-text">INDUSTRIAL DECISION INTELLIGENCE</span>
+          </div>
+
+          <h1 class="hero-headline">
+            Before you change the factory, understand what happens next.
+          </h1>
+
+          <p class="hero-statement">
+            Turn production disruptions into explainable recovery decisions with operational impact analysis, feasible alternatives, and engineering evidence.
+          </p>
+
+          <div class="hero-cta-group">
+            <button type="button" class="btn btn-primary btn-xl" id="btn-enter-workspace">
+              <span>Enter Decision Studio</span>
+              <span class="btn-icon" aria-hidden="true">→</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-xl" id="btn-explore-modal">
+              <span>Explore how it works</span>
+              <span class="btn-icon" aria-hidden="true">ⓘ</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-xl chip-quick-canonical" id="btn-launch-m17" title="Directly simulate the canonical M17 pick-and-place outage">
+              <span class="pulse-dot"></span>
+              <span>Simulate M17 8h disruption</span>
+            </button>
+          </div>
+
+          <!-- Real-time Factory Floor Telemetry Stream Ticker -->
+          <div class="landing-ticker-strip" aria-label="Real-time plant telemetry">
+            <div class="ticker-badge">
+              <span class="ticker-live-dot"></span>
+              <span>LIVE TELEMETRY</span>
+            </div>
+            <div class="ticker-marquee-wrap">
+              <div class="ticker-track">
+                <span class="ticker-item"><strong class="t-line">SMT LINE B:</strong> Speed 1.42s/cycle · 98.4% OEE</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">STATION B2:</strong> Pick-and-Place M17 Telemetry Active · 42°C</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">OPTIMIZER:</strong> Deterministic Physics Engine Online · 0ms Cache Latency</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">WAR ROOM:</strong> 4 Specialist Agents Standing By (Prod · Qty · Maint · Energy)</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">POLICY:</strong> Human Dispatch Authorization Required · Audit Logging Enabled</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">SMT LINE B:</strong> Speed 1.42s/cycle · 98.4% OEE</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">STATION B2:</strong> Pick-and-Place M17 Telemetry Active · 42°C</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">OPTIMIZER:</strong> Deterministic Physics Engine Online · 0ms Cache Latency</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">WAR ROOM:</strong> 4 Specialist Agents Standing By (Prod · Qty · Maint · Energy)</span>
+                <span class="ticker-sep">/</span>
+                <span class="ticker-item"><strong class="t-line">POLICY:</strong> Human Dispatch Authorization Required · Audit Logging Enabled</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Live Engineering Telemetry Accent Strip -->
+      <!-- Live Engineering Telemetry Accent Strip Across Bottom -->
       <div class="hero-telemetry-strip" aria-label="Engine Capabilities">
         <div class="telemetry-item">
           <span class="telemetry-idx">01</span>
