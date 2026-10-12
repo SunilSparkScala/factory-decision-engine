@@ -40,6 +40,27 @@ Both packs share one structure and seed, so every calculation is identical; only
 the 18 engineering documents (`knowledge/documents/<pack>/`) and the examples differ. Packs are
 defined in `app/domains/packs.py`; the API reads the pack from the `X-FDE-Domain` header.
 
+## Hack2Skill AI Builder Cup 2026 — Quick Judge Walkthrough
+
+- **Official Judging Compliance Audit:** [docs/HACK2SKILL_JUDGING_COMPLIANCE.md](docs/HACK2SKILL_JUDGING_COMPLIANCE.md)
+- **Media Asset Provenance & License Credits:** [docs/ASSET_CREDITS.md](docs/ASSET_CREDITS.md)
+
+### 3-Minute Demonstration Flow
+1. **Explore the Landing Page (`/`):**
+   - Live machine-vision monitor on the left streaming authentic automotive robotics assembly footage (`hero_automotive.mp4`, Engin Altundağ, Pexels).
+   - Core value proposition on the right: *"When a machine stops, production decisions can’t wait."*
+   - Real-time factory floor telemetry marquee ticker streaming line metrics.
+2. **Launch Canonical Scenario:**
+   - Click **"Enter Decision Studio"** or **"Simulate M17 8h disruption"**.
+   - **Step 1 (Scenario):** Canonical M17 8h disruption loaded into the workspace.
+   - **Step 2 (Impact):** Deterministic engine calculates **211.2 lost units (17.6%)**, **6 affected orders**, and **3 exposed high-priority customer deliveries**.
+   - **Step 3 (Alternatives):** Ranks **7 feasible** and **3 infeasible** plans across cost, delivery, quality, risk, and energy.
+   - **Step 4 (Recommendation):** Selects `PLAN_TRANSFER_07` (transfer to M26 at $100 cost, score `0.6881`), reviewed by the 4 AI specialists (Production, Quality, Maintenance, Energy) with grounded citations.
+   - **Step 5 (Human Approval Gate):** Mandatory explicit authorization required before any work orders or supervisor notices are drafted.
+3. **Test Interactive What-If Sensitivity:**
+   - In the scenario box, submit: `What if overtime is not allowed?`
+   - Observe the deterministic engine dynamically transition overtime plans to infeasible (`Overtime is strictly disallowed`), shifting feasible count from 7 → 6 while preserving all baseline M17 parameters.
+
 ## Run locally
 
 ```powershell

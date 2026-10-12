@@ -467,10 +467,19 @@ button { cursor: pointer; }
   font-weight: 800;
   line-height: 1.16;
   letter-spacing: -0.03em;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   color: #ffffff;
   max-width: 680px;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+
+.hero-content-pane .hero-motto {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 14px;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
 }
 
 .hero-content-pane .hero-statement {
