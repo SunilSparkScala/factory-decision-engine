@@ -339,6 +339,28 @@ def simulate_alert():
     from app.prediction.alerts import simulate_fault
     return simulate_fault()
 
+@app.get("/api/knowledge")
+def list_knowledge_documents():
+    """List all verified engineering documents and constraints for the current industry pack."""
+    from app.knowledge.repository import get_knowledge_repository
+    repo = get_knowledge_repository()
+    return {
+        "documents": [
+            {
+                "document_id": doc.document_id,
+                "title": doc.title,
+                "document_type": doc.document_type,
+                "topics": doc.topics,
+                "machine_ids": doc.machine_ids,
+                "station_ids": doc.station_ids,
+                "line_ids": doc.line_ids,
+                "excerpt": doc.content[:300].strip() + ("..." if len(doc.content) > 300 else ""),
+                "content": doc.content,
+            }
+            for doc in sorted(repo.documents.values(), key=lambda d: d.document_id)
+        ]
+    }
+
 # Mount UI static directory
 UI_DIR = Path(__file__).resolve().parent / "ui"
 if UI_DIR.exists():

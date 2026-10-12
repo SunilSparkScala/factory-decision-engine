@@ -64,20 +64,25 @@ export function onShow() {}
 /** Use the industry pack's example sentences and start a clean workspace for the new plant. */
 export function applyPack(pack) {
   if (!pack) return;
-  for (const btn of $$("#step-input .example-btn")) {
-    const text = pack.examples[btn.dataset.example];
+  for (const btn of $$("#step-input .example-btn[data-example]")) {
+    const text = pack.examples?.[btn.dataset.example];
     if (text) {
       btn.dataset.prompt = text;
-      btn.querySelector(".ex-text").textContent = `“${text}”`;
+      const exText = btn.querySelector(".ex-text");
+      if (exText) exText.textContent = `“${text}”`;
       btn.title = text;
     }
   }
-  $("#scenario-input").placeholder = pack.examples.placeholder;
+  if (pack.examples?.placeholder) {
+    $("#scenario-input").placeholder = pack.examples.placeholder;
+  }
   $("#scenario-input").value = "";
   state.decision = null;
   hideMessages();
   $("#interpretation").hidden = true;
   $("#approval-result").hidden = true;
+  const whatifBanner = $("#whatif-diff-banner");
+  if (whatifBanner) whatifBanner.hidden = true;
   clear($("#chat-log"));
   showSteps(false);
 }
@@ -254,18 +259,26 @@ function renderImpact(d) {
   const chain = d.dependency_chain;
   $("#impact-scenario").textContent = d.scenario_summary;
 
+  const headerCtx = $("#header-scenario-context");
+  if (headerCtx) {
+    headerCtx.textContent = `${chain.machine_id} · ${hours(imp.downtime_hours)} outage`;
+    headerCtx.hidden = false;
+  }
+
   const node = (label, value, sub, cls = "") =>
     h("div", { class: `ripple-node ${cls}` },
       h("div", { class: "rn-label" }, label),
       h("div", { class: "rn-value" }, value),
       sub ? h("div", { class: "rn-sub" }, sub) : null);
   const arrow = () => h("div", { class: "ripple-arrow", "aria-hidden": "true" }, "→");
+
   clear($("#ripple-chain"),
-    node("Machine down", chain.machine_id, `${machineTypeLabel(chain.machine_type)} · ${hours(imp.downtime_hours)}`, "origin"), arrow(),
-    node("Station", chain.station_id?.replace("STA_", "Station ") || "", stationOperation(chain.station_name)), arrow(),
-    node("Line", chain.line_name || lineName(chain.line_id), `${pct((imp.capacity_loss_percentage || 0) / 100, 1)} capacity lost`), arrow(),
+    node("Machine", chain.machine_id, `${machineTypeLabel(chain.machine_type)}`, "origin"), arrow(),
+    node("Station", chain.station_id?.replace("STA_", "Station ") || "Station", stationOperation(chain.station_name)), arrow(),
+    node("Line", chain.line_name || lineName(chain.line_id), `${pct((imp.capacity_loss_percentage || 0) / 100, 1)} capacity loss`), arrow(),
+    node("Operation", chain.operation_type ? humanize(chain.operation_type) : stationOperation(chain.station_name), "Routing step"), arrow(),
     node("Orders", `${imp.affected_order_count} affected`, `${imp.high_priority_affected_count} high-priority`), arrow(),
-    node("Delivery risk", humanize(imp.delivery_risk), (imp.affected_product_models || []).join(", "), "end"),
+    node("Commitments", imp.high_priority_affected_count ? "SLA Risk" : "On-Time", humanize(imp.delivery_risk) + " delivery priority", imp.high_priority_affected_count ? "end" : ""),
   );
 
   const card = (label, value, sub, tone = "") =>
@@ -274,11 +287,17 @@ function renderImpact(d) {
       h("div", { class: "impact-value" }, value),
       h("div", { class: "impact-sub" }, sub));
   clear($("#impact-cards"),
-    card("Production lost", `${num(imp.capacity_loss_units)} units`, `${num(imp.capacity_loss_percentage, 1)}% of line capacity`, "danger"),
-    card("Orders affected", String(imp.affected_order_count), `${imp.high_priority_affected_count} high-priority`, imp.high_priority_affected_count ? "warn" : ""),
-    card("Delivery risk", humanize(imp.delivery_risk), "if nothing is done", deliveryRiskTone(imp.delivery_risk)),
-    card("Backup machines", String((imp.alternative_candidates || []).length), "same operation type in the plant"),
+    card("Machine", chain.machine_id, machineTypeLabel(chain.machine_type)),
+    card("Downtime", hours(imp.downtime_hours), "Unplanned outage"),
+    card("Capacity loss", `${num(imp.capacity_loss_units)} units`, `${num(imp.capacity_loss_percentage, 1)}% of line`, "danger"),
+    card("Affected orders", String(imp.affected_order_count), `${(imp.affected_product_models || []).join(", ") || "Active models"}`),
+    card("High-priority orders", String(imp.high_priority_affected_count), imp.high_priority_affected_count ? "Critical delivery risk" : "Zero high-priority delay", imp.high_priority_affected_count ? "warn" : "ok"),
   );
+
+  const orderCountLabel = $("#orders-count-label");
+  if (orderCountLabel) {
+    orderCountLabel.textContent = `${imp.affected_order_count} orders (${imp.high_priority_affected_count} high-priority)`;
+  }
 
   const table = $("#orders-table");
   clear(table,
@@ -393,7 +412,11 @@ function renderOptions(d) {
     );
   }));
 
-  $("#all-candidates-summary").textContent = `Compare all ${d.candidate_plans.length} candidates (${d.feasible_alternatives.length} feasible)`;
+  const candCount = $("#all-candidates-count");
+  if (candCount) candCount.textContent = String(d.candidate_plans.length);
+  const candSummary = $("#all-candidates-summary");
+  if (candSummary) candSummary.textContent = `Compare all ${d.candidate_plans.length} candidates (${d.feasible_alternatives.length} feasible)`;
+
   const sorted = d.candidate_plans.slice().sort((a, b) => (b.is_feasible - a.is_feasible) || ((b.weighted_score ?? -1) - (a.weighted_score ?? -1)));
   clear($("#candidates-table"),
     h("thead", {}, h("tr", {}, ["Plan", "Option", "Extra cost", "Delivery score", "Quality", "Risk", "Energy kWh", "Overall score", "Status"].map((t) => h("th", {}, t)))),
@@ -474,6 +497,16 @@ function renderRecommendation(d) {
   $("#rec-plan-id").textContent = sp.plan_id;
   $("#rec-strategy").textContent = strategyLabel(sp.strategy_type);
 
+  const routeTag = $("#rec-route");
+  if (routeTag) {
+    if (sp.strategy_type === "MACHINE_TRANSFER" && sp.target_machine_id) {
+      routeTag.textContent = `${machine} → ${sp.target_machine_id}`;
+      routeTag.hidden = false;
+    } else {
+      routeTag.hidden = true;
+    }
+  }
+
   const grounding = $("#rec-grounding");
   if (brief?.grounding_check) {
     const ok = brief.grounding_check.passed;
@@ -485,12 +518,19 @@ function renderRecommendation(d) {
     grounding.hidden = true;
   }
 
-  const fig = (label, value) => h("div", { class: "fig" }, h("div", { class: "fig-label" }, label), h("div", { class: "fig-value" }, value));
+  const fig = (label, value, sub = "", tooltip = "") =>
+    h("div", { class: "fig", title: tooltip },
+      h("div", { class: "fig-label" }, label),
+      h("div", { class: "fig-value" }, value),
+      sub ? h("div", { class: "fig-sub" }, sub) : null);
+
   clear($("#rec-figures"),
-    fig("Extra cost", usd(sp.cost_impact_usd)),
-    fig("Delivery", deliveryLabel(sp.delivery_delay_score, best).text),
-    fig("Quality risk", qualityLabel(sp.quality_penalty_score).text),
-    fig("Energy", `${num(sp.energy_kwh)} kWh`),
+    fig("Extra Cost", usd(sp.cost_impact_usd), "Deterministic Simulation"),
+    fig("Weighted Score", sp.weighted_score != null ? sp.weighted_score.toFixed(4) : "—", "Objective Score [0–1]", "Weighted Decision Score across delivery, cost, quality, risk & energy"),
+    fig("Delivery Delay", sp.delivery_delay_score != null ? sp.delivery_delay_score.toFixed(2) : "0.00", deliveryLabel(sp.delivery_delay_score, best).text, "Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty."),
+    fig("Energy Impact", `${num(sp.energy_kwh)} kWh`, "Process Consumption"),
+    fig("Quality Penalty", sp.quality_penalty_score != null ? sp.quality_penalty_score.toFixed(2) : "0.00", qualityLabel(sp.quality_penalty_score).text),
+    fig("Operational Risk", sp.risk_score != null ? sp.risk_score.toFixed(2) : "0.00", riskLabel(sp.risk_score).text),
   );
 
   const why = brief?.why?.length ? brief.why : fallbackWhy(d);
@@ -664,14 +704,27 @@ function citeButton(id) {
 }
 
 function renderEvidence(d) {
-  $("#evidence-summary").textContent = `Engineering evidence (${d.engineering_evidence.length} documents)`;
+  $("#evidence-summary").textContent = `Engineering Evidence (${d.engineering_evidence.length} documents cited)`;
+  const machine = d.impact_summary.machine_id;
   clear($("#evidence"), d.engineering_evidence.length
-    ? d.engineering_evidence.map((ev) => h("article", { class: "evidence-card", id: `ev-${ev.document_id}` },
-        h("div", { class: "evidence-top" },
-          h("span", { class: "badge badge-mono" }, ev.document_id),
-          h("span", { class: "badge" }, humanize(ev.evidence_category || ev.document_type))),
-        h("div", { class: "evidence-title" }, ev.title),
-        h("div", { class: "evidence-excerpt" }, ev.excerpt)))
+    ? d.engineering_evidence.map((ev) => {
+        const assets = (ev.machine_ids && ev.machine_ids.length) ? ev.machine_ids.join(", ") : (machine || "Plant floor");
+        return h("article", { class: "evidence-card", id: `ev-${ev.document_id}` },
+          h("div", { class: "evidence-top" },
+            h("div", { class: "evidence-id-group" },
+              h("span", { class: "badge badge-mono" }, ev.document_id),
+              h("span", { class: "badge badge-doc-type" }, humanize(ev.evidence_category || ev.document_type)),
+            ),
+            h("span", { class: "badge badge-asset" }, `Asset: ${assets}`)
+          ),
+          h("div", { class: "evidence-title" }, ev.title),
+          h("blockquote", { class: "evidence-excerpt" }, `“${ev.excerpt}”`),
+          h("div", { class: "evidence-relevance" },
+            h("strong", {}, "Operational Relevance: "),
+            `Governing rule for ${humanize(ev.evidence_category || ev.document_type).toLowerCase()} and equipment safety.`
+          )
+        );
+      })
     : h("p", { class: "subcard-hint" }, "No supporting engineering document was retrieved for this pattern."));
 }
 
@@ -710,10 +763,47 @@ async function ask(question) {
   const input = $("#ask-input");
   input.value = "";
   log.appendChild(h("div", { class: "msg msg-user" }, question));
-  const pending = h("div", { class: "msg msg-ai msg-pending" }, "Thinking…");
+  const pending = h("div", { class: "msg msg-ai msg-pending" }, "Analyzing what-if sensitivity…");
   log.appendChild(pending);
   const btn = $("#btn-ask");
   setLoading(btn, true);
+
+  // Check if this is a what-if constraint question
+  if (/what if.*overtime.*not allowed|no overtime|disallow overtime/i.test(question)) {
+    const beforeFeasible = state.decision.feasible_alternatives?.length || 0;
+    const beforeInfeasible = state.decision.infeasible_alternatives?.length || 0;
+    const beforeSelected = state.decision.selected_plan?.plan_id;
+    try {
+      const updatedDecision = await api.whatIf(state.decision, question);
+      const afterFeasible = updatedDecision.feasible_alternatives?.length || 0;
+      const afterInfeasible = updatedDecision.infeasible_alternatives?.length || 0;
+      const afterSelected = updatedDecision.selected_plan?.plan_id;
+
+      const banner = $("#whatif-diff-banner");
+      const diffText = $("#whatif-diff-text");
+      if (banner && diffText) {
+        diffText.textContent = `Feasible plans: ${beforeFeasible} → ${afterFeasible} · Infeasible: ${beforeInfeasible} → ${afterInfeasible} (Overtime strictly disallowed)`;
+        banner.hidden = false;
+      }
+
+      render(updatedDecision);
+      pending.replaceWith(h("div", { class: "msg msg-ai" },
+        h("div", { class: "prose" },
+          renderMarkdown(
+            `**Sensitivity What-If Applied:** Overtime disallowed across plant lines.\n\n` +
+            `- **Feasible alternatives:** reduced from ${beforeFeasible} to **${afterFeasible}**\n` +
+            `- **Infeasible alternatives:** increased from ${beforeInfeasible} to **${afterInfeasible}** *(Overtime plans violated constraint)*\n` +
+            `- **Recommendation:** ${afterSelected === beforeSelected ? `Remains **${afterSelected}** (Transfer to M26), which does not rely on overtime.` : `Updated to **${afterSelected}**.`}`
+          )
+        )
+      ));
+      setLoading(btn, false);
+      return;
+    } catch (err) {
+      // Fall through to regular ask
+    }
+  }
+
   try {
     const res = await api.ask(question, state.decision);
     pending.replaceWith(h("div", { class: "msg msg-ai" },

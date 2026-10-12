@@ -1,383 +1,712 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Factory Decision Engine</title>
-  <meta name="description" content="Before you change the factory, understand what happens next.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%231d4ed8'/%3E%3Cpath d='M5 19V11l4 2.4V11l4 2.4V8l6 3v8z' fill='white'/%3E%3C/svg%3E">
+  <title>Factory Decision Engine — Industrial Decision Intelligence</title>
+  <meta name="description" content="Before you change the factory, understand what happens next. Turn manufacturing disruptions into explainable recovery decisions with engineering evidence and human approval.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230f131a'/%3E%3Cpath d='M4 19V11l4 2.5V11l4 2.5V8l8 4.5v6.5z' fill='none' stroke='%2300b4d8' stroke-width='1.75' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='13.5' r='1.5' fill='%2300b4d8'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script>
-    // Apply saved theme before first paint to avoid a flash
+    // Apply saved theme before first paint
     try {
       const t = localStorage.getItem("fde-theme");
       if (t) document.documentElement.dataset.theme = t;
+      else document.documentElement.dataset.theme = "dark";
     } catch (e) {}
   </script>
 </head>
-<body>
+<body class="fde-app">
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <header class="app-header">
-    <div class="header-inner">
-      <div class="brand">
+  <!-- =========================================================================
+       EXPERIENCE A: CINEMATIC INDUSTRIAL HERO LANDING PAGE
+       ========================================================================= -->
+  <section class="view view-landing" id="view-landing" aria-label="Product Landing">
+    <!-- Background Industrial Video & Fallback Poster -->
+    <div class="hero-media-wrapper" aria-hidden="true">
+      <video id="hero-video" class="hero-bg-video" autoplay muted loop playsinline poster="/static/assets/hero_poster.jpg">
+        <source src="/static/assets/hero_industrial.webm" type="video/webm">
+      </video>
+      <div class="hero-poster-fallback" id="hero-poster"></div>
+      <div class="hero-vignette"></div>
+      <div class="hero-grid-lines"></div>
+    </div>
+
+    <!-- Landing Navigation -->
+    <header class="landing-header">
+      <div class="landing-brand">
         <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l5 3V10l5 3V6l8 4v11z"/><path d="M7 17h2M12 17h2M17 17h2"/></svg>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21V10l5 3V10l5 3V6l8 4v11z"/>
+            <circle cx="12" cy="13" r="1.5" fill="currentColor"/>
+          </svg>
         </div>
-        <div class="brand-text">
-          <span class="brand-name">Factory Decision Engine</span>
-          <span class="brand-tagline">Before you change the factory, understand what happens next.</span>
+        <div class="landing-brand-text">
+          <span class="brand-name">FACTORY DECISION ENGINE</span>
+          <span class="brand-sub">INDUSTRIAL DECISION INTELLIGENCE</span>
         </div>
       </div>
 
-      <nav class="main-nav" aria-label="Main">
-        <button class="nav-tab" data-view="control" aria-current="page">
-          <span class="nav-icon" aria-hidden="true">◉</span> Control Room
-          <span class="nav-badge" id="nav-alert-count" hidden>0</span>
-        </button>
-        <button class="nav-tab" data-view="decide">
-          <span class="nav-icon" aria-hidden="true">⚡</span> Decide
-        </button>
-        <button class="nav-tab" data-view="log">
-          <span class="nav-icon" aria-hidden="true">✓</span> Decision Log
+      <nav class="landing-nav" aria-label="Landing Navigation">
+        <button type="button" class="landing-nav-link" id="btn-how-it-works">How It Works</button>
+        <button type="button" class="landing-nav-link" id="btn-architecture">Engine Architecture</button>
+        <label class="domain-select domain-select-landing" title="Switch synthetic plant pack">
+          <span class="domain-label">Industry:</span>
+          <select id="domain-select-landing" aria-label="Industry"></select>
+        </label>
+        <span class="ai-pill" id="ai-status-landing" role="status" title="AI Status">
+          <span class="dot"></span><span class="ai-status-text">Checking AI…</span>
+        </span>
+        <button type="button" class="btn btn-primary btn-landing-cta" id="btn-hero-enter">
+          Enter Decision Studio <span class="arrow" aria-hidden="true">→</span>
         </button>
       </nav>
+    </header>
 
-      <div class="header-status">
-        <label class="domain-select" title="Same engine, different plant: switch the industry">
-          <span class="domain-label">Industry</span>
-          <select id="domain-select" aria-label="Industry"></select>
-        </label>
-        <span class="chip chip-clock" id="plant-clock" title="Simulated plant time (the demo plant runs on its own clock)">🕗 --</span>
-        <span class="ai-pill" id="ai-status" role="status" title="AI status">
-          <span class="dot"></span><span id="ai-status-text">Checking AI…</span>
-        </span>
-        <button class="icon-btn" id="btn-tour" aria-label="Take the guided tour" title="Guided tour">?</button>
-        <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle light / dark">
-          <span class="theme-icon-light" aria-hidden="true">☀</span>
-          <span class="theme-icon-dark" aria-hidden="true">☾</span>
+    <!-- Main Cinematic Hero Content -->
+    <div class="landing-hero-content">
+      <div class="hero-badge-eyebrow">
+        <span class="eyebrow-dot"></span>
+        <span class="eyebrow-text">INDUSTRIAL DECISION INTELLIGENCE</span>
+      </div>
+
+      <h1 class="hero-headline">
+        Before you change the factory, understand what happens next.
+      </h1>
+
+      <p class="hero-statement">
+        Turn production disruptions into explainable recovery decisions with operational impact analysis, feasible alternatives, and engineering evidence.
+      </p>
+
+      <div class="hero-cta-group">
+        <button type="button" class="btn btn-primary btn-xl" id="btn-enter-workspace">
+          <span>Enter Decision Studio</span>
+          <span class="btn-icon" aria-hidden="true">→</span>
+        </button>
+        <button type="button" class="btn btn-outline btn-xl" id="btn-explore-modal">
+          <span>Explore how it works</span>
+          <span class="btn-icon" aria-hidden="true">ⓘ</span>
+        </button>
+        <button type="button" class="btn btn-ghost btn-xl chip-quick-canonical" id="btn-launch-m17" title="Directly simulate the canonical M17 pick-and-place outage">
+          <span class="pulse-dot"></span>
+          <span>Simulate M17 8h disruption</span>
         </button>
       </div>
+
+      <!-- Live Engineering Telemetry Accent Strip -->
+      <div class="hero-telemetry-strip" aria-label="Engine Capabilities">
+        <div class="telemetry-item">
+          <span class="telemetry-idx">01</span>
+          <div class="telemetry-body">
+            <strong>Dependency Tracing</strong>
+            <span>Machine → Station → Line → Orders</span>
+          </div>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-idx">02</span>
+          <div class="telemetry-body">
+            <strong>Deterministic Engine</strong>
+            <span>Physics simulation &amp; Pareto scoring</span>
+          </div>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-idx">03</span>
+          <div class="telemetry-body">
+            <strong>Specialist War Room</strong>
+            <span>Production, Quality, Maintenance &amp; Energy</span>
+          </div>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-idx">04</span>
+          <div class="telemetry-body">
+            <strong>Human Dispatch Boundary</strong>
+            <span>Mandatory human review &amp; audit logging</span>
+          </div>
+        </div>
+      </div>
     </div>
-  </header>
+  </section>
 
-  <main id="main" class="app-main">
+  <!-- =========================================================================
+       EXPERIENCE B: DECISION STUDIO FIXED WORKSPACE APPLICATION SHELL
+       ========================================================================= -->
+  <div class="app-shell" id="app-shell">
 
-    <!-- ============================ CONTROL ROOM ============================ -->
-    <section class="view" id="view-control" aria-labelledby="control-title">
-      <div class="view-head">
-        <div>
-          <h1 id="control-title">Control Room</h1>
-          <p class="view-sub" id="plant-name">Live plant status, incoming alerts and early warnings.</p>
-        </div>
-        <button class="btn btn-ghost btn-sm" id="btn-about-data" aria-haspopup="dialog">ⓘ About this demo data</button>
-      </div>
-
-      <!-- Report a disruption: the app's main action, available the moment it opens -->
-      <form class="quick-report" id="quick-report" autocomplete="off">
-        <label for="quick-report-input" class="quick-report-label"><span aria-hidden="true">⚡</span> Report a disruption</label>
-        <input id="quick-report-input" type="text" placeholder="What happened? e.g. “M17 is down for about 6 hours, protect high-priority orders”">
-        <button type="submit" class="btn btn-primary">Analyze →</button>
-      </form>
-
-      <div class="kpi-row" id="kpi-row">
-        <div class="kpi skeleton"></div><div class="kpi skeleton"></div>
-      </div>
-
-      <div class="grid-2">
-        <section class="card" aria-labelledby="alerts-title">
-          <div class="card-head">
-            <div>
-              <h2 id="alerts-title">Needs action now</h2>
-              <p class="card-sub">Machine faults and urgent predictions. Open one to get a ready plan.</p>
-            </div>
-            <button class="btn btn-demo btn-sm" id="btn-simulate-fault"
-              title="In production, faults arrive automatically from machine controllers (PLC/MES, e.g. via Pub/Sub). This button simulates one.">🧪 Demo: simulate a machine fault</button>
+    <!-- Compact Desktop Header (56px) -->
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand brand-clickable" id="brand-home" title="Return to Cinematic Landing">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 21V10l5 3V10l5 3V6l8 4v11z"/>
+              <circle cx="12" cy="13" r="1.5" fill="currentColor"/>
+            </svg>
           </div>
-          <div id="alert-list" class="alert-list" aria-live="polite">
-            <div class="skeleton-block"></div>
+          <div class="brand-text">
+            <span class="brand-name">Factory Decision Engine</span>
+            <span class="brand-tagline">Industrial Decision Intelligence</span>
+          </div>
+        </div>
+
+        <div class="header-breadcrumb" id="header-breadcrumb" aria-hidden="true">
+          <span class="bc-sep">/</span>
+          <span class="bc-current" id="bc-view-name">Decision Studio</span>
+        </div>
+
+        <div class="header-status">
+          <span class="header-context-chip" id="header-scenario-context" hidden>--</span>
+          <label class="domain-select" title="Same engine, different plant: switch the industry">
+            <span class="domain-label">Industry</span>
+            <select id="domain-select" aria-label="Industry"></select>
+          </label>
+          <span class="chip chip-clock" id="plant-clock" title="Simulated plant time">🕗 --</span>
+          <span class="ai-pill" id="ai-status" role="status" title="AI status">
+            <span class="dot"></span><span id="ai-status-text">Checking AI…</span>
+          </span>
+          <button class="nav-return-landing" id="btn-back-landing" title="Return to Cinematic Landing Page">⌂ Landing</button>
+          <button class="icon-btn" id="btn-tour" aria-label="Take the guided tour" title="Guided tour">?</button>
+          <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle light / dark">
+            <span class="theme-icon-light" aria-hidden="true">☀</span>
+            <span class="theme-icon-dark" aria-hidden="true">☾</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Workspace Fixed Shell Layout -->
+    <div class="app-layout">
+      <!-- Fixed Left Navigation Rail (~200px) -->
+      <aside class="app-sidebar" aria-label="Application Navigation">
+        <nav class="sidebar-nav">
+          <button class="sidebar-tab active" data-view="decide" id="nav-tab-decide" aria-current="page">
+            <span class="tab-icon" aria-hidden="true">⚡</span>
+            <span class="tab-label">Decision Studio</span>
+            <span class="tab-pill" id="pill-active-decision" hidden>Active</span>
+          </button>
+          <button class="sidebar-tab" data-view="control" id="nav-tab-control">
+            <span class="tab-icon" aria-hidden="true">◉</span>
+            <span class="tab-label">Factory Overview</span>
+            <span class="nav-badge" id="nav-alert-count" hidden>0</span>
+          </button>
+          <button class="sidebar-tab" data-view="recovery" id="nav-tab-recovery">
+            <span class="tab-icon" aria-hidden="true">⇄</span>
+            <span class="tab-label">Recovery Plans</span>
+          </button>
+          <button class="sidebar-tab" data-view="evidence" id="nav-tab-evidence">
+            <span class="tab-icon" aria-hidden="true">📖</span>
+            <span class="tab-label">Engineering Evidence</span>
+          </button>
+          <button class="sidebar-tab" data-view="log" id="nav-tab-log">
+            <span class="tab-icon" aria-hidden="true">✓</span>
+            <span class="tab-label">Decision Log</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="integrity-card">
+            <div class="integrity-title">Engine Principle</div>
+            <div class="integrity-desc">AI reasons · Python calculates</div>
+            <div class="integrity-badges">
+              <span class="badge badge-subtle">Deterministic Math</span>
+              <span class="badge badge-subtle">Grounded Review</span>
+              <span class="badge badge-subtle">Human Dispatch</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Operational Viewport Container -->
+      <main id="main" class="app-main">
+
+        <!-- =================================================================
+             DECISION STUDIO VIEW (Fixed 2-column desktop composition)
+             ================================================================= -->
+        <section class="view view-workspace" id="view-decide" aria-labelledby="decide-title">
+          <div class="studio-container">
+
+            <!-- COLUMN 1: Operational Canvas (~62% width) -->
+            <div class="studio-canvas">
+
+              <!-- STEP 1: Disruption Scenario Composer -->
+              <section class="studio-card card-composer" id="step-input" aria-labelledby="composer-heading">
+                <div class="card-header-compact">
+                  <div class="step-badge-title">
+                    <span class="step-num-badge">1</span>
+                    <h2 id="composer-heading" class="section-title">Describe Disruption Scenario</h2>
+                  </div>
+                  <div class="composer-actions">
+                    <span class="kbd-shortcut-hint" title="Press Ctrl+Enter or Cmd+Enter to run analysis">Ctrl+Enter to run</span>
+                    <button type="button" class="link-btn" id="btn-reset-demo" title="Restore canonical M17 8h scenario">↺ Reset Demo</button>
+                  </div>
+                </div>
+
+                <form id="scenario-form" class="scenario-form" autocomplete="off">
+                  <label for="scenario-input" class="sr-only">Describe disruption in plain English</label>
+                  <textarea id="scenario-input" rows="2" placeholder="e.g. M17 pick-and-place is down for 8 hours tomorrow. Maintain high-priority customer deliveries while minimizing total cost impact."></textarea>
+                  <div class="composer-submit-row">
+                    <div class="scenario-chips" role="group" aria-label="Scenario Examples">
+                      <span class="chips-label">Examples:</span>
+                      <button type="button" class="example-btn chip-example" data-example="clear" data-prompt="M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.">
+                        <span class="ex-label">Machine failure (M17 · 8h)</span>
+                      </button>
+                      <button type="button" class="example-btn chip-example" data-example="plain" data-prompt="The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap and no overtime please.">
+                        <span class="ex-label">Everyday language</span>
+                      </button>
+                      <button type="button" class="example-btn chip-example" data-example="vague" data-prompt="The welding robot on line B jammed, probably out till lunch. Don't let customer orders slip.">
+                        <span class="ex-label">Missing detail → AI asks</span>
+                      </button>
+                      <button type="button" class="example-btn chip-example chip-whatif-overtime" data-prompt="What if overtime is not allowed?">
+                        <span class="ex-label">Disallow overtime</span>
+                      </button>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btn-analyze">
+                      <span class="btn-label">Run Analysis</span>
+                      <span class="spinner" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+
+                <!-- Loading Progress Indicator -->
+                <div id="progress" class="progress" hidden aria-live="polite">
+                  <div class="progress-step" data-stage="0"><span class="ps-dot"></span>1 · Gemini interprets operational disruption</div>
+                  <span class="progress-arrow" aria-hidden="true">→</span>
+                  <div class="progress-step" data-stage="1"><span class="ps-dot"></span>2 · Deterministic engine simulates ripple &amp; optimizes options</div>
+                  <span class="progress-arrow" aria-hidden="true">→</span>
+                  <div class="progress-step progress-parallel" data-stage="2">
+                    <span class="ps-dot"></span>
+                    <span>3 · Specialist War Room <small>Production · Quality · Maintenance · Energy</small></span>
+                  </div>
+                </div>
+
+                <!-- Scenario Interpretation Banner -->
+                <div id="interpretation" class="interpretation" hidden></div>
+                <!-- Clarification Card -->
+                <div id="clarification" class="callout callout-warn" hidden role="alert"></div>
+                <!-- Error Banner -->
+                <div id="error-banner" class="callout callout-error" hidden role="alert"></div>
+              </section>
+
+              <!-- Empty State: Displayed before analysis runs -->
+              <div class="empty-state-studio card" id="empty-state">
+                <div class="empty-icon-wrap" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="3"/>
+                    <path d="M3 9h18M9 21V9"/>
+                  </svg>
+                </div>
+                <h3>Ready to evaluate factory disruptions</h3>
+                <p>Describe an incident above, click a scenario chip, or run the canonical M17 pick-and-place failure to inspect real-time dependency propagation and Pareto recovery plans.</p>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-empty-canonical">Load Canonical M17 Scenario</button>
+              </div>
+
+              <!-- STEP 2: Impact Strip & Compact Visual Dependency Trace -->
+              <section class="studio-card card-impact" id="step-impact" hidden aria-labelledby="impact-heading">
+                <div class="card-header-compact">
+                  <div class="step-badge-title">
+                    <span class="step-num-badge">2</span>
+                    <h2 id="impact-heading" class="section-title">Operational Impact &amp; Dependency Propagation</h2>
+                  </div>
+                  <span class="step-hint" id="impact-scenario"></span>
+                </div>
+
+                <!-- Compact Visual Dependency Trace -->
+                <div class="dependency-trace-wrap">
+                  <div class="trace-header">
+                    <span class="trace-label">Factory Dependency Path</span>
+                    <span class="trace-sub">Grounded machine topology &amp; routing</span>
+                  </div>
+                  <div class="ripple" id="ripple-chain" aria-label="Factory dependency propagation"></div>
+                </div>
+
+                <!-- Compact Impact Metric Cards Strip -->
+                <div class="impact-grid" id="impact-cards"></div>
+
+                <!-- Affected Orders Drawer / Disclosure -->
+                <details class="disclosure" id="orders-disclosure">
+                  <summary>Inspect Affected Customer Orders (<span id="orders-count-label">6 orders</span>)</summary>
+                  <div class="table-wrap"><table class="data-table" id="orders-table"></table></div>
+                </details>
+              </section>
+
+              <!-- STEP 4: Compare Alternatives & Recovery Strategies -->
+              <section class="studio-card card-alternatives" id="step-options" hidden aria-labelledby="options-heading">
+                <div class="card-header-compact">
+                  <div class="step-badge-title">
+                    <span class="step-num-badge">4</span>
+                    <h2 id="options-heading" class="section-title">Recovery Plan Comparison &amp; Trade-Offs</h2>
+                  </div>
+                  <!-- Priority Preset Toggles -->
+                  <div class="priority-bar-compact">
+                    <span class="priority-label" id="priority-label">Optimizer Priorities:</span>
+                    <div class="segmented" role="radiogroup" aria-labelledby="priority-label" id="priority-presets">
+                      <button role="radio" data-priorities="balanced all objectives">Balanced</button>
+                      <button role="radio" data-priorities="delivery">Protect deliveries</button>
+                      <button role="radio" data-priorities="cost">Minimize cost</button>
+                      <button role="radio" data-priorities="delivery cost">Deliveries + cost</button>
+                      <button role="radio" data-priorities="risk">Lowest risk</button>
+                      <button role="radio" data-priorities="energy">Save energy</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Strategy Cards Grid -->
+                <div class="options-grid" id="option-cards"></div>
+
+                <!-- Workspace Sub-views (Tabs): Candidates Matrix / Plant Transfer Map / Robustness -->
+                <div class="subview-tabs-header">
+                  <div class="tab-pills" role="tablist">
+                    <button type="button" class="subtab-btn active" data-subtab="candidates" role="tab" aria-selected="true">
+                      Candidates Matrix (<span id="all-candidates-count">10</span>)
+                    </button>
+                    <button type="button" class="subtab-btn" data-subtab="map" role="tab" aria-selected="false">
+                      Plant Floor Routing
+                    </button>
+                    <button type="button" class="subtab-btn" data-subtab="robustness" role="tab" aria-selected="false">
+                      Downtime Robustness (1–48h)
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Tab 1: Candidates Matrix -->
+                <div class="subtab-panel" id="panel-candidates" role="tabpanel">
+                  <div class="table-wrap">
+                    <table class="data-table" id="candidates-table"></table>
+                  </div>
+                </div>
+
+                <!-- Tab 2: Plant Floor Routing Map -->
+                <div class="subtab-panel" id="panel-map" role="tabpanel" hidden>
+                  <div class="subcard" id="impact-map-card">
+                    <div class="subcard-head">
+                      <h4>What happens next on the plant floor</h4>
+                      <span class="subcard-hint">The broken machine, candidate alternate machines, and the recommended transfer path.</span>
+                    </div>
+                    <div id="impact-map" class="plant-map"></div>
+                  </div>
+                </div>
+
+                <!-- Tab 3: Robustness Horizon -->
+                <div class="subtab-panel" id="panel-robustness" role="tabpanel" hidden>
+                  <div class="subcard" id="robustness-card">
+                    <div class="subcard-head">
+                      <h4>Downtime Sensitivity Horizon</h4>
+                      <span class="subcard-hint">Deterministic re-evaluation across 1–48 hours of outage duration.</span>
+                    </div>
+                    <div id="robustness"></div>
+                  </div>
+                </div>
+              </section>
+
+            </div>
+
+            <!-- COLUMN 2: Decision & Recommendation Rail (~38% width) -->
+            <div class="studio-rail">
+
+              <!-- STEP 3: The Recommendation Hero Card (Focal Point of the Product) -->
+              <section class="studio-card card-recommendation" id="step-recommendation" hidden aria-labelledby="rec-heading">
+                <div class="card-header-compact">
+                  <div class="step-badge-title">
+                    <span class="step-num-badge badge-primary-step">3</span>
+                    <h2 id="rec-heading" class="section-title">Recommended Recovery Action</h2>
+                  </div>
+                  <span class="badge badge-primary-glow" id="rec-status-tag">Dominant Plan</span>
+                </div>
+
+                <!-- Specialist Objections Callout -->
+                <div id="rec-objections" class="callout callout-error objection-banner" hidden role="alert"></div>
+
+                <!-- Hero Recommendation Banner -->
+                <div class="rec-hero-card">
+                  <div class="rec-hero-header">
+                    <div class="rec-badge-row">
+                      <span class="badge badge-mono" id="rec-plan-id">PLAN_--</span>
+                      <span class="badge badge-strategy" id="rec-strategy">--</span>
+                      <span class="badge badge-route" id="rec-route" hidden></span>
+                      <span class="badge badge-grounding" id="rec-grounding" hidden></span>
+                    </div>
+                    <h3 class="rec-title" id="rec-title">Waiting for analysis...</h3>
+                    <p class="rec-summary" id="rec-summary"></p>
+                  </div>
+
+                  <!-- Provenance & Data Origin Badges -->
+                  <div class="data-provenance-row">
+                    <span class="prov-tag prov-fact" title="Direct database fact from factory state">Fact: Factory Topology</span>
+                    <span class="prov-tag prov-calc" title="Deterministic Python simulation & physics">Calc: Simulation Math</span>
+                    <span class="prov-tag prov-obj" title="Multi-objective Pareto scoring">Objective: Weighted Score</span>
+                    <span class="prov-tag prov-ai" title="Gemini specialist review & natural language synthesis">Reasoning: Gemini AI</span>
+                  </div>
+
+                  <!-- Primary Evaluation Metrics Figures -->
+                  <div class="rec-figures-grid" id="rec-figures"></div>
+
+                  <!-- Why This Plan vs Watch Out For -->
+                  <div class="rec-rationale-columns">
+                    <div class="rec-col">
+                      <h4 class="mini-head">Why this plan wins</h4>
+                      <ul class="check-list" id="rec-why"></ul>
+                    </div>
+                    <div class="rec-col">
+                      <h4 class="mini-head">Specialist watch-outs</h4>
+                      <ul class="warn-list" id="rec-watch"></ul>
+                    </div>
+                  </div>
+
+                  <!-- Next Steps Checklist -->
+                  <div class="rec-next-steps">
+                    <h4 class="mini-head">Execution next steps</h4>
+                    <ol class="steps-list" id="rec-next"></ol>
+                  </div>
+                </div>
+
+                <!-- STEP 6: Mandatory Human Approval Boundary -->
+                <div class="approval-boundary-card" id="step-approve">
+                  <div class="approval-boundary-header">
+                    <div class="approval-icon" aria-hidden="true">⚖</div>
+                    <div>
+                      <strong>Human approval required.</strong>
+                      <p>The engine generates evidence-backed options. Plant dispatch requires human verification.</p>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-approve">
+                    <span>Review &amp; Approve Recommendation</span>
+                    <span class="btn-icon" aria-hidden="true">✓</span>
+                  </button>
+                  <div id="approval-result" hidden></div>
+                </div>
+
+                <!-- Specialist War Room Accordion/Card -->
+                <div class="warroom-rail-section">
+                  <div class="rail-subhead">
+                    <h4>Specialist War Room Consensus</h4>
+                    <span class="rail-subhint" id="warroom-consensus">Production, Quality, Maintenance &amp; Energy</span>
+                  </div>
+                  <div class="warroom" id="warroom"></div>
+                </div>
+
+                <!-- STEP 7: Conversational What-If & Ask the Decision Agent -->
+                <div class="ask-rail-section" id="ask-card">
+                  <div class="rail-subhead">
+                    <h4>Conversational What-If &amp; Agent Q&amp;A</h4>
+                    <span class="rail-subhint">Google ADK agent runs dynamic what-if simulations &amp; evidence retrieval</span>
+                  </div>
+
+                  <!-- What-If Sensitivity Diff Indicator -->
+                  <div class="whatif-diff-banner" id="whatif-diff-banner" hidden>
+                    <span class="diff-icon">⇄</span>
+                    <div class="diff-body">
+                      <strong>Sensitivity Context Applied:</strong>
+                      <span id="whatif-diff-text"></span>
+                    </div>
+                  </div>
+
+                  <div class="chat" id="chat-log" aria-live="polite"></div>
+
+                  <form class="ask-form" id="ask-form" autocomplete="off">
+                    <label for="ask-input" class="sr-only">Ask a what-if question</label>
+                    <input id="ask-input" type="text" placeholder="e.g. What if overtime is not allowed?">
+                    <button type="submit" class="btn btn-secondary" id="btn-ask">Ask</button>
+                  </form>
+
+                  <div class="chips chips-ask">
+                    <button type="button" class="chip-btn" data-question="What if overtime is not allowed?">No overtime?</button>
+                    <button type="button" class="chip-btn" data-question="Why not use overtime?">Why not overtime?</button>
+                    <button type="button" class="chip-btn" data-question="What if M26 also breaks down for 8 hours?" title="The ADK agent runs a new simulation to answer this">What if M26 breaks? ⚙</button>
+                    <button type="button" class="chip-btn" data-question="Explain this decision to my plant director in 3 short lines.">Explain to director</button>
+                  </div>
+                </div>
+
+                <!-- STEP 5: Engineering Evidence Citations -->
+                <details class="disclosure" id="evidence-disclosure" open>
+                  <summary id="evidence-summary">Engineering Evidence &amp; Citations</summary>
+                  <div class="evidence-grid" id="evidence"></div>
+                </details>
+
+                <!-- Technical Optimization Details -->
+                <details class="disclosure" id="details-disclosure">
+                  <summary>Mathematical &amp; Constraint Details</summary>
+                  <div class="details-grid">
+                    <div>
+                      <h4 class="mini-head">Numerical Authority</h4>
+                      <div id="agent-trace" class="trace"></div>
+                      <h4 class="mini-head">Optimizer Priority Weights</h4>
+                      <div id="weights" class="weights"></div>
+                      <p class="fine-print" title="Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty.">
+                        Delivery impact scale: 0.00 (optimal, zero delay) to 1.00 (maximum penalty).
+                      </p>
+                    </div>
+                    <div>
+                      <h4 class="mini-head">Engine Rationale</h4>
+                      <div id="rationale" class="prose"></div>
+                      <h4 class="mini-head">Assumptions</h4>
+                      <ul id="assumptions" class="plain-list"></ul>
+                      <h4 class="mini-head">Hard Constraints Checked</h4>
+                      <ul id="constraints" class="plain-list"></ul>
+                    </div>
+                  </div>
+                </details>
+
+              </section>
+
+            </div>
+
           </div>
         </section>
 
-        <section class="card" aria-labelledby="watch-title">
-          <div class="card-head">
+        <!-- =================================================================
+             FACTORY OVERVIEW / CONTROL ROOM VIEW
+             ================================================================= -->
+        <section class="view view-control" id="view-control" aria-labelledby="control-title" hidden>
+          <div class="view-head">
             <div>
-              <h2 id="watch-title">Machine health trends</h2>
-              <p class="card-sub">Machines whose sensor trends point toward an alarm. Plan ahead: backup plans are pre-built.</p>
-              <p class="card-note">A machine is promoted to “Needs action now” when it is predicted to reach an alarm within 36 hours.</p>
+              <h1 id="control-title">Factory Overview &amp; Control Room</h1>
+              <p class="view-sub" id="plant-name">Live plant status, machine sensor telemetry, early warning trends and incoming alerts.</p>
             </div>
+            <button class="btn btn-ghost btn-sm" id="btn-about-data" aria-haspopup="dialog">ⓘ About this demo plant data</button>
           </div>
-          <div id="watch-list" class="watch-list">
-            <div class="skeleton-block"></div>
-          </div>
-        </section>
-      </div>
 
-      <section class="card" aria-labelledby="lines-title">
-        <div class="card-head">
-          <div>
-            <h2 id="lines-title">Where’s the trouble?</h2>
-            <p class="card-sub">Each line, its stations in production order. Healthy stations stay quiet; only problems are marked. Click a machine to ask “what if it goes down?”</p>
-          </div>
-          <div class="legend" aria-hidden="true">
-            <span>⚠ at risk / degraded</span>
-            <span>🔧 maintenance</span>
-            <span>✕ down</span>
-          </div>
-        </div>
-        <div id="line-map" class="plant-map"></div>
-      </section>
-    </section>
-
-    <!-- ============================ DECISION WORKSPACE ============================ -->
-    <section class="view" id="view-decide" aria-labelledby="decide-title" hidden>
-      <div class="view-head">
-        <div>
-          <h1 id="decide-title">Decision Workspace</h1>
-          <p class="view-sub">Describe what happened in plain words. The engine calculates, AI agents explain, you decide.</p>
-        </div>
-      </div>
-
-      <ol class="flow">
-        <!-- STEP 1 -->
-        <li class="flow-step card" id="step-input">
-          <div class="step-head"><span class="step-num">1</span><h2>What happened?</h2>
-            <button type="button" class="link-btn" id="btn-reset-demo" title="Restore the canonical demo scenario">↺ Reset Demo</button></div>
-          <form id="scenario-form" class="scenario-form" autocomplete="off">
-            <label for="scenario-input" class="sr-only">Describe the disruption</label>
-            <textarea id="scenario-input" rows="2" placeholder="e.g. The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap, no overtime."></textarea>
-            <button type="submit" class="btn btn-primary btn-lg" id="btn-analyze">
-              <span class="btn-label">Analyze</span>
-              <span class="spinner" aria-hidden="true"></span>
-            </button>
+          <form class="quick-report" id="quick-report" autocomplete="off">
+            <label for="quick-report-input" class="quick-report-label"><span aria-hidden="true">⚡</span> Quick Disruption Intake:</label>
+            <input id="quick-report-input" type="text" placeholder="e.g. “M17 is down for about 6 hours, protect high-priority orders”">
+            <button type="submit" class="btn btn-primary">Analyze in Studio →</button>
           </form>
-          <div class="examples" role="group" aria-labelledby="examples-label">
-            <span class="examples-label" id="examples-label">Example reports, click one to put it in the box:</span>
-            <button type="button" class="example-btn" data-example="clear" data-prompt="M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.">
-              <span class="ex-text"></span><span class="ex-tag">clear report</span></button>
-            <button type="button" class="example-btn" data-example="plain" data-prompt="The Unit 2 welder at station B2 is down, maybe 6 to 10 hours. Keep it cheap and no overtime please.">
-              <span class="ex-text"></span><span class="ex-tag">everyday language</span></button>
-            <button type="button" class="example-btn" data-example="vague" data-prompt="The welding robot on line B jammed, probably out till lunch. Don't let customer orders slip.">
-              <span class="ex-text"></span><span class="ex-tag">missing detail → AI asks</span></button>
+
+          <div class="kpi-row" id="kpi-row">
+            <div class="kpi skeleton"></div><div class="kpi skeleton"></div>
           </div>
 
-          <div id="progress" class="progress" hidden aria-live="polite" title="Stage timing is estimated; the result appears when all stages finish.">
-            <div class="progress-step" data-stage="0"><span class="ps-dot"></span>1 · Gemini understands the message</div>
-            <span class="progress-arrow" aria-hidden="true">→</span>
-            <div class="progress-step" data-stage="1"><span class="ps-dot"></span>2 · Engine calculates impact &amp; options</div>
-            <span class="progress-arrow" aria-hidden="true">→</span>
-            <div class="progress-step progress-parallel" data-stage="2">
-              <span class="ps-dot"></span>
-              <span>3 · Specialists review <small>Production · Quality · Maintenance · Energy, side by side → Decision Lead</small></span>
-            </div>
-          </div>
-
-          <div id="interpretation" class="interpretation" hidden></div>
-          <div id="clarification" class="callout callout-warn" hidden role="alert"></div>
-          <div id="error-banner" class="callout callout-error" hidden role="alert"></div>
-        </li>
-
-        <!-- Empty state shown until a decision exists -->
-        <li class="empty-state card" id="empty-state">
-          <div class="empty-illustration" aria-hidden="true">⚙</div>
-          <h3>Waiting for analysis...</h3>
-          <p>Describe a disruption above, pick an example, or open an alert from the Control Room.</p>
-        </li>
-
-        <!-- STEP 2 -->
-        <li class="flow-step card" id="step-impact" hidden>
-          <div class="step-head"><span class="step-num">2</span><h2>Impact</h2><span class="step-hint" id="impact-scenario"></span></div>
-          <div class="ripple" id="ripple-chain" aria-label="How the disruption ripples through the plant"></div>
-          <div class="impact-grid" id="impact-cards"></div>
-          <div class="subcard" id="impact-map-card">
-            <div class="subcard-head">
-              <h4>What happens next on the plant floor</h4>
-              <span class="subcard-hint">The broken machine, which machines can or can’t take over its work, and where the recommended plan moves it.</span>
-            </div>
-            <div id="impact-map" class="plant-map"></div>
-          </div>
-          <details class="disclosure">
-            <summary>Affected orders</summary>
-            <div class="table-wrap"><table class="data-table" id="orders-table"></table></div>
-          </details>
-        </li>
-
-        <!-- STEP 3 -->
-        <li class="flow-step card" id="step-options" hidden>
-          <div class="step-head"><span class="step-num">3</span><h2>Your options</h2></div>
-          <div class="priority-bar">
-            <span class="priority-label" id="priority-label">What matters most?</span>
-            <div class="segmented" role="radiogroup" aria-labelledby="priority-label" id="priority-presets">
-              <button role="radio" data-priorities="balanced all objectives">Balanced</button>
-              <button role="radio" data-priorities="delivery">Protect deliveries</button>
-              <button role="radio" data-priorities="cost">Minimize cost</button>
-              <button role="radio" data-priorities="delivery cost">Deliveries + cost</button>
-              <button role="radio" data-priorities="risk">Lowest risk</button>
-              <button role="radio" data-priorities="energy">Save energy</button>
-            </div>
-          </div>
-          <div class="options-grid" id="option-cards"></div>
-          <details class="disclosure">
-            <summary id="all-candidates-summary">Compare all candidates</summary>
-            <div class="table-wrap"><table class="data-table" id="candidates-table"></table></div>
-          </details>
-        </li>
-
-        <!-- STEP 4 -->
-        <li class="flow-step card" id="step-recommendation" hidden>
-          <div class="step-head"><span class="step-num">4</span><h2>Recommendation</h2></div>
-
-          <div id="rec-objections" class="callout callout-error objection-banner" hidden role="alert"></div>
-
-          <div class="rec-hero">
-            <div class="rec-main">
-              <span class="eyebrow">Recommended action</span>
-              <h3 class="rec-title" id="rec-title">Waiting for analysis...</h3>
-              <p class="rec-summary" id="rec-summary"></p>
-              <div class="rec-meta">
-                <span class="badge badge-mono" id="rec-plan-id">PLAN_--</span>
-                <span class="badge" id="rec-strategy">--</span>
-                <span class="badge badge-grounding" id="rec-grounding" hidden></span>
+          <div class="grid-2">
+            <section class="card" aria-labelledby="alerts-title">
+              <div class="card-head">
+                <div>
+                  <h2 id="alerts-title">Needs Action Now</h2>
+                  <p class="card-sub">Active machine faults and urgent predictive alarms.</p>
+                </div>
+                <button class="btn btn-demo btn-sm" id="btn-simulate-fault"
+                  title="Simulates an automatic PLC/MES fault event">🧪 Demo: simulate fault</button>
               </div>
-            </div>
-            <div class="rec-figures" id="rec-figures"></div>
+              <div id="alert-list" class="alert-list" aria-live="polite">
+                <div class="skeleton-block"></div>
+              </div>
+            </section>
+
+            <section class="card" aria-labelledby="watch-title">
+              <div class="card-head">
+                <div>
+                  <h2 id="watch-title">Machine Health Trends</h2>
+                  <p class="card-sub">Machines whose telemetry trends forecast degradation within 36 hours.</p>
+                </div>
+              </div>
+              <div id="watch-list" class="watch-list">
+                <div class="skeleton-block"></div>
+              </div>
+            </section>
           </div>
 
-          <div class="rec-columns">
-            <div>
-              <h4 class="mini-head">Why this plan</h4>
-              <ul class="check-list" id="rec-why"></ul>
-            </div>
-            <div>
-              <h4 class="mini-head">Watch out for</h4>
-              <ul class="warn-list" id="rec-watch"></ul>
-            </div>
-            <div>
-              <h4 class="mini-head">Next steps</h4>
-              <ol class="steps-list" id="rec-next"></ol>
-            </div>
-          </div>
-
-          <div class="subcard" id="robustness-card">
-            <div class="subcard-head">
-              <h4>How long does this plan hold?</h4>
-              <span class="subcard-hint">Repair times are uncertain, so the engine re-ran the decision for 1–48 h of downtime.</span>
-            </div>
-            <div id="robustness"></div>
-          </div>
-
-          <div class="subcard" id="warroom-card">
-            <div class="subcard-head">
-              <h4>Specialist war room</h4>
-              <span class="subcard-hint" id="warroom-consensus">Four AI specialists review the plan from their domain.</span>
-            </div>
-            <div class="warroom" id="warroom"></div>
-          </div>
-
-          <div class="subcard" id="ask-card">
-            <div class="subcard-head">
-              <h4>Ask about this decision</h4>
-              <span class="subcard-hint">An AI agent answers, and runs new simulations when your question needs them (e.g. “what if M26 also breaks?”).</span>
-            </div>
-            <div class="chat" id="chat-log" aria-live="polite"></div>
-            <form class="ask-form" id="ask-form" autocomplete="off">
-              <label for="ask-input" class="sr-only">Your question</label>
-              <input id="ask-input" type="text" placeholder="e.g. Why not use overtime?">
-              <button type="submit" class="btn btn-secondary" id="btn-ask">Ask</button>
-            </form>
-            <div class="chips">
-              <button class="chip-btn" data-question="Why not use overtime?">Why not overtime?</button>
-              <button class="chip-btn" data-question="What is the biggest risk with this plan?">Biggest risk?</button>
-              <button class="chip-btn" data-question="Explain this decision to my plant director in 3 short lines.">Explain to my director</button>
-              <button class="chip-btn" data-question="What if M26 also breaks down for 8 hours?" title="The AI agent runs a new simulation to answer this">What if M26 also breaks? ⚙</button>
-            </div>
-          </div>
-
-          <details class="disclosure" id="evidence-disclosure" open>
-            <summary id="evidence-summary">Engineering evidence</summary>
-            <div class="evidence-grid" id="evidence"></div>
-          </details>
-
-          <details class="disclosure">
-            <summary>Engineering details</summary>
-            <div class="details-grid">
+          <section class="card" aria-labelledby="lines-title">
+            <div class="card-head">
               <div>
-                <h4 class="mini-head">Where the numbers come from</h4>
-                <div id="agent-trace" class="trace"></div>
-                <h4 class="mini-head">Priority weights used by the optimizer</h4>
-                <div id="weights" class="weights"></div>
-                <p class="fine-print" title="Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty.">Delivery impact score: Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty.</p>
+                <h2 id="lines-title">Plant Topology &amp; Line Status</h2>
+                <p class="card-sub">Production stations in process order. Click any machine to simulate an outage.</p>
               </div>
-              <div>
-                <h4 class="mini-head">Engine rationale</h4>
-                <div id="rationale" class="prose"></div>
-                <h4 class="mini-head">Assumptions</h4>
-                <ul id="assumptions" class="plain-list"></ul>
-                <h4 class="mini-head">Hard constraints checked</h4>
-                <ul id="constraints" class="plain-list"></ul>
+              <div class="legend" aria-hidden="true">
+                <span>⚠ Degraded</span>
+                <span>🔧 Maintenance</span>
+                <span>✕ Down</span>
               </div>
             </div>
-          </details>
-        </li>
+            <div id="line-map" class="plant-map"></div>
+          </section>
+        </section>
 
-        <!-- STEP 5 -->
-        <li class="flow-step card" id="step-approve" hidden>
-          <div class="step-head"><span class="step-num">5</span><h2>Approve</h2></div>
-          <div class="approve-row">
-            <div class="approve-text">
-              <strong>Human approval required.</strong>
-              <span>Nothing is sent to the shop floor automatically. Approving records the decision and drafts the work order, quality notice and customer update for people to send.</span>
+        <!-- =================================================================
+             RECOVERY PLANS VIEW (Dedicated view for full candidate exploration)
+             ================================================================= -->
+        <section class="view view-recovery" id="view-recovery" aria-labelledby="recovery-title" hidden>
+          <div class="view-head">
+            <div>
+              <h1 id="recovery-title">Recovery Plans &amp; Strategy Evaluation</h1>
+              <p class="view-sub">Complete Pareto frontier of candidate actions across machine transfers, schedule reordering, and overtime.</p>
             </div>
-            <button class="btn btn-primary btn-lg" id="btn-approve">Review &amp; approve</button>
           </div>
-          <div id="approval-result" hidden></div>
-        </li>
-      </ol>
-    </section>
+          <div class="recovery-view-body" id="recovery-view-body">
+            <div class="card" id="recovery-table-card">
+              <div class="card-head">
+                <h2>All Evaluated Candidates</h2>
+                <span class="card-sub">Calculated via deterministic multi-objective solver</span>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table" id="view-recovery-table"></table>
+              </div>
+            </div>
+          </div>
+        </section>
 
-    <!-- ============================ DECISION LOG ============================ -->
-    <section class="view" id="view-log" aria-labelledby="log-title" hidden>
-      <div class="view-head">
-        <div>
-          <h1 id="log-title">Decision Log</h1>
-          <p class="view-sub">Every approved decision with who approved it, when, and the documents produced.</p>
-        </div>
-      </div>
-      <div id="decision-log" class="log-list"></div>
-    </section>
-  </main>
+        <!-- =================================================================
+             ENGINEERING EVIDENCE VIEW (Dedicated browsable repository)
+             ================================================================= -->
+        <section class="view view-evidence" id="view-evidence" aria-labelledby="evidence-view-title" hidden>
+          <div class="view-head">
+            <div>
+              <h1 id="evidence-view-title">Engineering Knowledge &amp; Constraints</h1>
+              <p class="view-sub">18 verified engineering standards, machine manuals, SOPs, and incident reports used for grounded reasoning.</p>
+            </div>
+          </div>
+          <div class="evidence-catalog" id="evidence-catalog"></div>
+        </section>
 
-  <!-- Approval modal -->
+        <!-- =================================================================
+             DECISION LOG VIEW (Audited human approvals)
+             ================================================================= -->
+        <section class="view view-log" id="view-log" aria-labelledby="log-title" hidden>
+          <div class="view-head">
+            <div>
+              <h1 id="log-title">Decision Audit Log</h1>
+              <p class="view-sub">Immutable record of human-approved actions, supervisor work orders, and quality dispatches.</p>
+            </div>
+          </div>
+          <div id="decision-log" class="log-list"></div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODALS & DRAWERS
+       ========================================================================= -->
+
+  <!-- Human Approval Modal -->
   <div class="modal-backdrop" id="approve-modal" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="approve-title">
+    <div class="modal modal-approve" role="dialog" aria-modal="true" aria-labelledby="approve-title">
       <div class="modal-head">
-        <h2 id="approve-title">Approve recovery plan</h2>
+        <h2 id="approve-title">Approve Recovery Plan &amp; Draft Documents</h2>
         <button class="icon-btn" data-close aria-label="Close">✕</button>
       </div>
       <form id="approve-form">
         <div class="modal-body">
           <div class="approve-summary" id="approve-summary"></div>
           <label class="field">
-            <span>Approved by</span>
-            <input id="approver-name" type="text" required placeholder="Name, role (e.g. Priya Sharma, Shift Manager)">
+            <span>Approved by (Name &amp; Role)</span>
+            <input id="approver-name" type="text" required placeholder="e.g. Priya Sharma, Shift Operations Manager">
           </label>
           <label class="field">
-            <span>Note (optional)</span>
-            <textarea id="approver-note" rows="2" placeholder="Anything the floor team should know"></textarea>
+            <span>Operational Note (optional)</span>
+            <textarea id="approver-note" rows="2" placeholder="Special floor instructions or coordination notes"></textarea>
           </label>
           <div id="approve-objections"></div>
           <label class="check">
             <input type="checkbox" id="approver-ack" required>
-            <span>I have reviewed the impact, risks and specialist conditions.</span>
+            <span>I have verified the impact, specialist risk conditions, and engineering evidence.</span>
           </label>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-ghost" data-close>Cancel</button>
           <button type="submit" class="btn btn-primary" id="btn-confirm-approve">
-            <span class="btn-label">Approve &amp; draft documents</span>
+            <span class="btn-label">Confirm Approval &amp; Generate Documents</span>
             <span class="spinner" aria-hidden="true"></span>
           </button>
         </div>
@@ -385,17 +714,50 @@
     </div>
   </div>
 
-  <!-- About this demo data -->
+  <!-- Explore How It Works Modal -->
+  <div class="modal-backdrop" id="how-modal" hidden>
+    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="how-title">
+      <div class="modal-head">
+        <h2 id="how-title">How Factory Decision Engine Works</h2>
+        <button class="icon-btn" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body modal-prose">
+        <div class="architecture-pillars">
+          <div class="pillar-card">
+            <div class="pillar-icon">01</div>
+            <h3>AI Reasons, Python Calculates</h3>
+            <p>Every operational number (capacity loss, schedule delay, energy consumption, Pareto score) is computed by a deterministic optimization engine in Python. Gemini never invents numerical values.</p>
+          </div>
+          <div class="pillar-card">
+            <div class="pillar-icon">02</div>
+            <h3>Grounded Specialist War Room</h3>
+            <p>Four autonomous specialist agents (Production, Quality, Maintenance, Energy) evaluate the candidate recovery actions against 18 engineering documents and standards before formulating the decision brief.</p>
+          </div>
+          <div class="pillar-card">
+            <div class="pillar-icon">03</div>
+            <h3>Mandatory Human Approval</h3>
+            <p>The system is strictly an intelligence tool, not an autonomous controller. Human shift managers review trade-offs, verify citations, and explicitly approve the action before dispatch notices are created.</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-primary" id="btn-how-enter">Enter Decision Studio →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Demo Data Modal -->
   <div class="modal-backdrop" id="about-modal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="about-title">
       <div class="modal-head">
-        <h2 id="about-title">About this demo data</h2>
+        <h2 id="about-title">About Synthetic Plant Data</h2>
         <button class="icon-btn" data-close aria-label="Close">✕</button>
       </div>
       <div class="modal-body" id="about-body"></div>
     </div>
   </div>
 
+  <!-- Toast Container -->
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script type="module" src="/static/app.js"></script>
