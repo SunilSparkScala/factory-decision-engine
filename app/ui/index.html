@@ -34,6 +34,7 @@
       <div class="hero-poster-fallback" id="hero-poster"></div>
       <div class="hero-vignette"></div>
       <div class="hero-grid-lines"></div>
+      <div class="hero-scan-beam"></div>
     </div>
 
     <!-- Landing Navigation -->
@@ -97,34 +98,77 @@
         </button>
       </div>
 
+      <!-- Real-time Factory Floor Telemetry Stream Ticker -->
+      <div class="landing-ticker-strip" aria-label="Real-time plant telemetry">
+        <div class="ticker-badge">
+          <span class="ticker-live-dot"></span>
+          <span>LIVE TELEMETRY</span>
+        </div>
+        <div class="ticker-marquee-wrap">
+          <div class="ticker-track">
+            <span class="ticker-item"><strong class="t-line">SMT LINE B:</strong> Speed 1.42s/cycle · 98.4% OEE</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">STATION B2:</strong> Pick-and-Place M17 Telemetry Active · 42°C</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">OPTIMIZER:</strong> Deterministic Physics Engine Online · 0ms Cache Latency</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">WAR ROOM:</strong> 4 Specialist Agents Standing By (Prod · Qty · Maint · Energy)</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">POLICY:</strong> Human Dispatch Authorization Required · Audit Logging Enabled</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">SMT LINE B:</strong> Speed 1.42s/cycle · 98.4% OEE</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">STATION B2:</strong> Pick-and-Place M17 Telemetry Active · 42°C</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">OPTIMIZER:</strong> Deterministic Physics Engine Online · 0ms Cache Latency</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">WAR ROOM:</strong> 4 Specialist Agents Standing By (Prod · Qty · Maint · Energy)</span>
+            <span class="ticker-sep">/</span>
+            <span class="ticker-item"><strong class="t-line">POLICY:</strong> Human Dispatch Authorization Required · Audit Logging Enabled</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Live Engineering Telemetry Accent Strip -->
       <div class="hero-telemetry-strip" aria-label="Engine Capabilities">
         <div class="telemetry-item">
           <span class="telemetry-idx">01</span>
           <div class="telemetry-body">
-            <strong>Dependency Tracing</strong>
-            <span>Machine → Station → Line → Orders</span>
+            <div class="telemetry-title-row">
+              <strong>Dependency Tracing</strong>
+              <span class="mini-status-pill"><span class="msp-dot"></span>Topology</span>
+            </div>
+            <span class="telemetry-sub">Machine → Station → Line → Orders</span>
           </div>
         </div>
         <div class="telemetry-item">
           <span class="telemetry-idx">02</span>
           <div class="telemetry-body">
-            <strong>Deterministic Engine</strong>
-            <span>Physics simulation &amp; Pareto scoring</span>
+            <div class="telemetry-title-row">
+              <strong>Deterministic Engine</strong>
+              <span class="mini-status-pill"><span class="msp-dot"></span>100% Math</span>
+            </div>
+            <span class="telemetry-sub">Physics simulation &amp; Pareto scoring</span>
           </div>
         </div>
         <div class="telemetry-item">
           <span class="telemetry-idx">03</span>
           <div class="telemetry-body">
-            <strong>Specialist War Room</strong>
-            <span>Production, Quality, Maintenance &amp; Energy</span>
+            <div class="telemetry-title-row">
+              <strong>Specialist War Room</strong>
+              <span class="mini-status-pill"><span class="msp-dot"></span>4 Agents</span>
+            </div>
+            <span class="telemetry-sub">Production, Quality, Maintenance &amp; Energy</span>
           </div>
         </div>
         <div class="telemetry-item">
           <span class="telemetry-idx">04</span>
           <div class="telemetry-body">
-            <strong>Human Dispatch Boundary</strong>
-            <span>Mandatory human review &amp; audit logging</span>
+            <div class="telemetry-title-row">
+              <strong>Human Dispatch Boundary</strong>
+              <span class="mini-status-pill"><span class="msp-dot"></span>Grounded</span>
+            </div>
+            <span class="telemetry-sub">Mandatory human review &amp; audit logging</span>
           </div>
         </div>
       </div>

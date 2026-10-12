@@ -19,14 +19,30 @@ const VIEW_TITLES = {
   log: "Decision Log",
 };
 
+function playHeroVideo() {
+  const vid = $("#hero-video");
+  if (!vid) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  vid.muted = true;
+  vid.playsInline = true;
+  const promise = vid.play();
+  if (promise !== undefined) {
+    promise.catch(() => {
+      const trigger = () => {
+        vid.play().catch(() => {});
+      };
+      window.addEventListener("pointerdown", trigger, { once: true });
+      window.addEventListener("scroll", trigger, { once: true });
+      window.addEventListener("keydown", trigger, { once: true });
+    });
+  }
+}
+
 const VIEWS = {
   landing: {
     isLanding: true,
     onShow: () => {
-      const vid = $("#hero-video");
-      if (vid && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        vid.play().catch(() => {});
-      }
+      playHeroVideo();
     },
   },
   decide: { el: "#view-decide", onShow: workspace.onShow },

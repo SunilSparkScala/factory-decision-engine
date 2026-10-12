@@ -246,15 +246,16 @@ button { cursor: pointer; }
   height: auto;
   transform: translate(-50%, -50%);
   object-fit: cover;
-  opacity: 0.38;
-  filter: contrast(1.05) brightness(0.72);
+  opacity: 0.70;
+  filter: contrast(1.12) brightness(0.92);
+  transition: opacity 0.5s ease;
 }
 
 .hero-poster-fallback {
   position: absolute;
   inset: 0;
   background: url("/static/assets/hero_poster.jpg") center/cover no-repeat;
-  opacity: 0.40;
+  opacity: 0.65;
   z-index: -1;
 }
 
@@ -262,10 +263,11 @@ button { cursor: pointer; }
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 50% 35%, rgba(9, 11, 16, 0.45) 0%, rgba(9, 11, 16, 0.88) 65%, rgba(5, 7, 10, 0.98) 100%),
-    linear-gradient(180deg, rgba(9, 11, 16, 0.95) 0%, rgba(9, 11, 16, 0.4) 30%, rgba(9, 11, 16, 0.96) 100%),
-    linear-gradient(90deg, rgba(9, 11, 16, 0.85) 0%, transparent 45%, rgba(9, 11, 16, 0.85) 100%);
+    radial-gradient(ellipse at 50% 45%, rgba(9, 11, 16, 0.22) 0%, rgba(9, 11, 16, 0.70) 65%, rgba(5, 7, 10, 0.95) 100%),
+    linear-gradient(180deg, rgba(9, 11, 16, 0.80) 0%, transparent 22%, transparent 75%, rgba(9, 11, 16, 0.96) 100%),
+    linear-gradient(90deg, rgba(9, 11, 16, 0.75) 0%, transparent 45%, rgba(9, 11, 16, 0.75) 100%);
   z-index: 1;
+  pointer-events: none;
 }
 
 .hero-grid-lines {
@@ -277,6 +279,27 @@ button { cursor: pointer; }
   background-size: 60px 60px;
   z-index: 2;
   pointer-events: none;
+}
+
+.hero-scan-beam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 180, 216, 0.25) 20%, rgba(56, 189, 248, 0.9) 50%, rgba(0, 180, 216, 0.25) 80%, transparent 100%);
+  box-shadow: 0 0 16px rgba(0, 180, 216, 0.8), 0 0 32px rgba(0, 180, 216, 0.4);
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.75;
+  animation: hero-scan 7s ease-in-out infinite;
+}
+
+@keyframes hero-scan {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 0.8; }
+  90% { opacity: 0.8; }
+  100% { top: 100%; opacity: 0; }
 }
 
 /* Landing Header */
@@ -334,16 +357,17 @@ button { cursor: pointer; }
 .landing-hero-content {
   position: relative;
   z-index: 10;
-  max-width: 980px;
-  margin: auto auto 36px auto;
-  padding: 32px 40px;
+  max-width: 1020px;
+  margin: auto auto 24px auto;
+  padding: 32px 42px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  border-radius: var(--radius-lg);
-  background: radial-gradient(ellipse at center, rgba(9, 11, 16, 0.75) 0%, rgba(9, 11, 16, 0.3) 70%, transparent 100%);
-  backdrop-filter: blur(2px);
+  border-radius: var(--radius-xl);
+  background: radial-gradient(ellipse at center, rgba(9, 11, 16, 0.86) 0%, rgba(9, 11, 16, 0.60) 65%, transparent 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .hero-badge-eyebrow {
@@ -354,7 +378,7 @@ button { cursor: pointer; }
   border-radius: 999px;
   background: rgba(14, 116, 144, 0.25);
   border: 1px solid rgba(56, 189, 248, 0.4);
-  margin-bottom: 22px;
+  margin-bottom: 20px;
   backdrop-filter: blur(6px);
 }
 .eyebrow-dot {
@@ -370,7 +394,7 @@ button { cursor: pointer; }
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.03em;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   color: #ffffff;
   max-width: 860px;
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 0, 0, 0.5);
@@ -384,7 +408,7 @@ button { cursor: pointer; }
   font-size: clamp(15.5px, 1.8vw, 18px);
   line-height: 1.65;
   color: #e2e8f0;
-  margin-bottom: 36px;
+  margin-bottom: 30px;
   font-weight: 450;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
 }
@@ -395,7 +419,7 @@ button { cursor: pointer; }
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 48px;
+  margin-bottom: 24px;
 }
 
 .chip-quick-canonical {
@@ -417,7 +441,100 @@ button { cursor: pointer; }
   100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
 }
 
-/* Landing Telemetry Strip */
+/* Real-time Plant Floor Telemetry Ticker */
+.landing-ticker-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto 28px auto;
+  padding: 7px 16px;
+  background: rgba(15, 19, 26, 0.78);
+  border: 1px solid rgba(0, 180, 216, 0.28);
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), inset 0 0 12px rgba(0, 180, 216, 0.06);
+  overflow: hidden;
+}
+
+.ticker-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #34d399;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ticker-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulse-live 1.6s infinite ease-in-out;
+}
+
+@keyframes pulse-live {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+.ticker-marquee-wrap {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+}
+
+.ticker-track {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  white-space: nowrap;
+  animation: marquee-ticker 32s linear infinite;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: #cbd5e1;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes marquee-ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ticker-item .t-line {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.ticker-sep {
+  color: var(--text-dim);
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+/* Landing Telemetry Capability Cards */
 .hero-telemetry-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -432,20 +549,68 @@ button { cursor: pointer; }
   gap: 14px;
   padding: 14px 18px;
   border-radius: var(--radius);
-  background: rgba(15, 19, 26, 0.7);
+  background: rgba(15, 19, 26, 0.78);
   border: 1px solid var(--border);
   backdrop-filter: blur(12px);
   text-align: left;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.telemetry-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 180, 216, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 12px rgba(0, 180, 216, 0.15);
 }
 .telemetry-idx {
   font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--primary);
   opacity: 0.85;
 }
+.telemetry-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.telemetry-body {
+  flex: 1;
+  min-width: 0;
+}
 .telemetry-body strong {
   display: block; font-size: 12.5px; font-weight: 650; color: #f1f5f9;
 }
-.telemetry-body span {
-  display: block; font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.telemetry-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 180, 216, 0.14);
+  border: 1px solid rgba(0, 180, 216, 0.32);
+  color: #38bdf8;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mini-status-pill .msp-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+  animation: pulse-live 2s infinite ease-in-out;
+  flex-shrink: 0;
 }
 
 /* =========================================================================
