@@ -52,8 +52,18 @@ const VIEWS = {
   log: { el: "#view-log", onShow: decisionLog.onShow },
 };
 
+export function setJourneyStep(stepNum) {
+  for (let i = 1; i <= 5; i++) {
+    const node = $(`#journey-node-${i}`);
+    if (node) {
+      node.classList.toggle("active", i === stepNum);
+      node.classList.toggle("completed", i < stepNum);
+    }
+  }
+}
+
 export function showView(name) {
-  if (!VIEWS[name]) name = "landing";
+  if (!VIEWS[name]) name = "control";
 
   const landingSection = $("#view-landing");
   const appShell = $("#app-shell");
@@ -86,6 +96,18 @@ export function showView(name) {
     // Update header breadcrumb
     const bc = $("#bc-view-name");
     if (bc) bc.textContent = VIEW_TITLES[name] || name;
+
+    // Update 5-Step Operational Journey Bar
+    if (name === "control") {
+      setJourneyStep(1);
+    } else if (name === "decide") {
+      if (state.decision) setJourneyStep(4);
+      else setJourneyStep(3);
+    } else if (name === "recovery" || name === "evidence") {
+      setJourneyStep(4);
+    } else if (name === "log") {
+      setJourneyStep(5);
+    }
   }
 
   if (location.hash.split("?")[0] !== `#${name}`) {
@@ -139,16 +161,35 @@ function initNav() {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   }
 
+  // 5-Step Journey Bar Node Handlers
+  $("#journey-node-1")?.addEventListener("click", () => showView("control"));
+  $("#journey-node-2")?.addEventListener("click", () => {
+    showView("control");
+    controlRoom.openTopIncidentModal?.();
+  });
+  $("#journey-node-3")?.addEventListener("click", () => {
+    showView("decide");
+    workspace.focusInput?.();
+  });
+  $("#journey-node-4")?.addEventListener("click", () => {
+    showView("decide");
+    document.getElementById("step-options")?.scrollIntoView({ behavior: "smooth" });
+  });
+  $("#journey-node-5")?.addEventListener("click", () => {
+    showView("decide");
+    document.getElementById("step-approve")?.scrollIntoView({ behavior: "smooth" });
+  });
+
   // Header return to landing
   $("#brand-home")?.addEventListener("click", () => showView("landing"));
   $("#btn-back-landing")?.addEventListener("click", () => showView("landing"));
 
-  // Landing CTAs
-  $("#btn-hero-enter")?.addEventListener("click", () => showView("decide"));
-  $("#btn-enter-workspace")?.addEventListener("click", () => showView("decide"));
+  // Landing CTAs lead directly to Factory Overview as default operational hub
+  $("#btn-hero-enter")?.addEventListener("click", () => showView("control"));
+  $("#btn-enter-workspace")?.addEventListener("click", () => showView("control"));
   $("#btn-how-enter")?.addEventListener("click", () => {
     $("#how-modal").hidden = true;
-    showView("decide");
+    showView("control");
   });
 
   // Modal triggers
@@ -230,9 +271,8 @@ async function initDomains() {
         setDomain(newKey);
         const pack = state.domains.find((d) => d.key === newKey);
         state.pack = pack;
-        setOperationNames(pack);
-        workspace.applyPack(pack);
         await controlRoom.reload();
+        workspace.applyPack(pack);
         toast(`Switched synthetic pack to ${pack.plant.name} (${pack.label})`);
       });
     });
@@ -324,16 +364,16 @@ async function boot() {
   initTheme();
   initNav();
   $("#btn-tour")?.addEventListener("click", openTour);
-  controlRoom.init({ showView, setPlantClock });
-  workspace.init({ showView });
+  controlRoom.init({ showView, setPlantClock, setJourneyStep });
+  workspace.init({ showView, setJourneyStep });
   decisionLog.init();
   await initDomains();
   await initHealth();
   api.overview().then((o) => setPlantClock(o.plant_clock)).catch(() => {});
 
   const [view, query] = location.hash.slice(1).split("?");
-  // Default landing page for root / unless specific view is in hash
-  const initialView = view || "landing";
+  // Default to Factory Overview for root / unless specific view is in hash (e.g. #landing)
+  const initialView = view || "control";
   showView(initialView);
 
   const q = new URLSearchParams(query || "").get("q");

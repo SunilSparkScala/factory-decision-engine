@@ -286,15 +286,15 @@
       <!-- Fixed Left Navigation Rail (~200px) -->
       <aside class="app-sidebar" aria-label="Application Navigation">
         <nav class="sidebar-nav">
-          <button class="sidebar-tab active" data-view="decide" id="nav-tab-decide" aria-current="page">
-            <span class="tab-icon" aria-hidden="true">⚡</span>
-            <span class="tab-label">Decision Studio</span>
-            <span class="tab-pill" id="pill-active-decision" hidden>Active</span>
-          </button>
-          <button class="sidebar-tab" data-view="control" id="nav-tab-control">
+          <button class="sidebar-tab active" data-view="control" id="nav-tab-control" aria-current="page">
             <span class="tab-icon" aria-hidden="true">◉</span>
             <span class="tab-label">Factory Overview</span>
             <span class="nav-badge" id="nav-alert-count" hidden>0</span>
+          </button>
+          <button class="sidebar-tab" data-view="decide" id="nav-tab-decide">
+            <span class="tab-icon" aria-hidden="true">⚡</span>
+            <span class="tab-label">Decision Studio</span>
+            <span class="tab-pill" id="pill-active-decision" hidden>Active</span>
           </button>
           <button class="sidebar-tab" data-view="recovery" id="nav-tab-recovery">
             <span class="tab-icon" aria-hidden="true">⇄</span>
@@ -326,6 +326,51 @@
       <!-- Main Operational Viewport Container -->
       <main id="main" class="app-main">
 
+        <!-- Global 5-Step Operational Journey Bar -->
+        <nav class="workflow-journey-strip" id="workflow-journey-strip" aria-label="Operational Decision Workflow">
+          <div class="journey-track">
+            <button type="button" class="journey-node active" id="journey-node-1" data-step="1" title="View Factory Overview & Monitor Fleet">
+              <span class="jn-num">1</span>
+              <div class="jn-meta">
+                <span class="jn-step">MONITOR</span>
+                <span class="jn-title">Factory Cockpit</span>
+              </div>
+            </button>
+            <span class="jn-connector" aria-hidden="true">→</span>
+            <button type="button" class="journey-node" id="journey-node-2" data-step="2" title="Investigate Active Incident">
+              <span class="jn-num">2</span>
+              <div class="jn-meta">
+                <span class="jn-step">INVESTIGATE</span>
+                <span class="jn-title">Incident Triage</span>
+              </div>
+            </button>
+            <span class="jn-connector" aria-hidden="true">→</span>
+            <button type="button" class="journey-node" id="journey-node-3" data-step="3" title="Analyze Disruption Scenario in Decision Studio">
+              <span class="jn-num">3</span>
+              <div class="jn-meta">
+                <span class="jn-step">ANALYZE</span>
+                <span class="jn-title">Decision Studio</span>
+              </div>
+            </button>
+            <span class="jn-connector" aria-hidden="true">→</span>
+            <button type="button" class="journey-node" id="journey-node-4" data-step="4" title="Compare Feasible Recovery Plans & Trade-Offs">
+              <span class="jn-num">4</span>
+              <div class="jn-meta">
+                <span class="jn-step">COMPARE</span>
+                <span class="jn-title">Trade-Offs &amp; What-If</span>
+              </div>
+            </button>
+            <span class="jn-connector" aria-hidden="true">→</span>
+            <button type="button" class="journey-node" id="journey-node-5" data-step="5" title="Human Review &amp; Executive Authorization">
+              <span class="jn-num">5</span>
+              <div class="jn-meta">
+                <span class="jn-step">APPROVE</span>
+                <span class="jn-title">Human Sign-off</span>
+              </div>
+            </button>
+          </div>
+        </nav>
+
         <!-- =================================================================
              DECISION STUDIO VIEW (Fixed 2-column desktop composition)
              ================================================================= -->
@@ -343,11 +388,35 @@
                     <h2 id="composer-heading" class="section-title">Describe Disruption Scenario</h2>
                   </div>
                   <div class="composer-actions">
+                    <button type="button" class="btn btn-ghost btn-xs btn-return-overview" id="btn-return-overview" title="Return to Factory Overview">
+                      ← Factory Overview (Monitor)
+                    </button>
                     <span class="kbd-shortcut-hint" title="Press Ctrl+Enter or Cmd+Enter to run analysis">Ctrl+Enter to run</span>
                     <button type="button" class="link-btn" id="btn-reset-demo" title="Restore canonical M17 8h scenario">↺ Reset Demo</button>
                   </div>
                 </div>
 
+                <!-- Attached Incident Context Banner -->
+                <div class="attached-incident-banner" id="attached-incident-banner" hidden>
+                  <div class="aib-info">
+                    <span class="aib-tag">⚡ Incident Context:</span>
+                    <strong class="aib-id" id="aib-incident-id">ALT-001</strong>
+                    <span class="aib-desc" id="aib-incident-desc"></span>
+                  </div>
+                  <button type="button" class="btn btn-ghost btn-xs" id="btn-clear-incident" title="Clear incident link">Detach Incident ✕</button>
+                </div>
+
+                <!-- Input Mode Switcher Tabs -->
+                <div class="composer-mode-tabs" role="tablist" aria-label="Scenario Entry Method">
+                  <button type="button" class="mode-tab-btn active" id="tab-mode-nl" role="tab" aria-selected="true" data-mode="nl">
+                    <span>💬 Natural Language</span>
+                  </button>
+                  <button type="button" class="mode-tab-btn" id="tab-mode-manual" role="tab" aria-selected="false" data-mode="manual">
+                    <span>⚙ Manual Configuration</span>
+                  </button>
+                </div>
+
+                <!-- Mode A: Natural Language Form -->
                 <form id="scenario-form" class="scenario-form" autocomplete="off">
                   <label for="scenario-input" class="sr-only">Describe disruption in plain English</label>
                   <textarea id="scenario-input" rows="2" placeholder="e.g. M17 pick-and-place is down for 8 hours tomorrow. Maintain high-priority customer deliveries while minimizing total cost impact."></textarea>
@@ -374,6 +443,52 @@
                   </div>
                 </form>
 
+                <!-- Mode B: Structured Manual Scenario Form -->
+                <form id="manual-scenario-form" class="manual-scenario-form" autocomplete="off" hidden>
+                  <div class="manual-grid">
+                    <label class="field">
+                      <span class="field-label">Target Asset / Machine</span>
+                      <select id="manual-machine-select" class="select-field" required></select>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Outage Duration (Hours)</span>
+                      <input id="manual-downtime" type="number" class="input-field" min="0.5" max="48" step="0.5" value="8.0" required>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Optimization Priority Focus</span>
+                      <select id="manual-priority-select" class="select-field">
+                        <option value="delivery cost">Balanced (Delivery 40% · Cost 40%)</option>
+                        <option value="delivery">Protect Customer Deliveries First (Delivery 65%)</option>
+                        <option value="cost">Minimize Total Cost (Cost 65%)</option>
+                        <option value="quality">Strict Zero-Defect Tolerance (Quality 40%)</option>
+                        <option value="energy">Minimize Energy Consumption (Energy 40%)</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="manual-constraints-row">
+                    <span class="mc-label">Operational Policy Constraints:</span>
+                    <label class="check-inline">
+                      <input type="checkbox" id="manual-disallow-overtime">
+                      <span>Disallow Overtime</span>
+                    </label>
+                    <label class="check-inline">
+                      <input type="checkbox" id="manual-disallow-transfers">
+                      <span>Disallow Machine Transfers</span>
+                    </label>
+                    <label class="check-inline">
+                      <input type="checkbox" id="manual-disallow-reorder">
+                      <span>Disallow Queue Reordering</span>
+                    </label>
+                  </div>
+                  <div class="composer-submit-row">
+                    <span class="hint-text">Simulates physics impact, checks constraints &amp; scores Pareto candidates</span>
+                    <button type="submit" class="btn btn-primary" id="btn-run-manual">
+                      <span class="btn-label">Run Structured Scenario</span>
+                      <span class="spinner" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+
                 <!-- Loading Progress Indicator -->
                 <div id="progress" class="progress" hidden aria-live="polite">
                   <div class="progress-step" data-stage="0"><span class="ps-dot"></span>1 · Gemini interprets operational disruption</div>
@@ -392,6 +507,42 @@
                 <div id="clarification" class="callout callout-warn" hidden role="alert"></div>
                 <!-- Error Banner -->
                 <div id="error-banner" class="callout callout-error" hidden role="alert"></div>
+              </section>
+
+              <!-- EXECUTIVE DECISION BRIEFING CARD (Appears at top of results when analysis completes) -->
+              <section class="executive-decision-card card" id="executive-decision-briefing" hidden aria-labelledby="edc-heading">
+                <div class="edc-header">
+                  <div class="edc-badge-row">
+                    <span class="badge badge-accent" id="edc-heading">DECISION BRIEFING</span>
+                    <span class="badge badge-mono" id="edc-plan-id">PLAN_TRANSFER_07</span>
+                    <span class="badge badge-ok" id="edc-feasibility-badge">FEASIBLE RECOVERY PLAN</span>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-jump-approve">
+                    <span>Review &amp; Authorize Plan →</span>
+                  </button>
+                </div>
+                <div class="edc-grid">
+                  <div class="edc-item">
+                    <span class="edc-lbl">What Happened</span>
+                    <strong class="edc-val" id="edc-what-happened">M17 down 8.0h (211.2 cap lost)</strong>
+                  </div>
+                  <div class="edc-item">
+                    <span class="edc-lbl">Customer Exposure</span>
+                    <strong class="edc-val highlight" id="edc-order-impact">6 orders affected (3 high-priority)</strong>
+                  </div>
+                  <div class="edc-item">
+                    <span class="edc-lbl">Recommended Recovery Plan</span>
+                    <strong class="edc-val" id="edc-rec-action">Transfer production to M26</strong>
+                  </div>
+                  <div class="edc-item">
+                    <span class="edc-lbl">Cost &amp; Penalty Impact</span>
+                    <strong class="edc-val mono" id="edc-cost-impact">$100 setup fee · Zero delivery delay penalty</strong>
+                  </div>
+                </div>
+                <div class="edc-rationale-row">
+                  <span class="edc-why-tag">Why Recommended:</span>
+                  <span class="edc-why-text" id="edc-why-text">Eliminates delivery delay penalties while avoiding expensive overtime shifts, verified against Engineering SOP.</span>
+                </div>
               </section>
 
               <!-- Empty State: Displayed before analysis runs -->
@@ -661,69 +812,296 @@
         </section>
 
         <!-- =================================================================
-             FACTORY OVERVIEW / CONTROL ROOM VIEW
+             FACTORY OVERVIEW / CONTROL ROOM VIEW (VISUAL OPERATIONS COCKPIT)
              ================================================================= -->
         <section class="view view-control" id="view-control" aria-labelledby="control-title" hidden>
-          <div class="view-head">
-            <div>
-              <h1 id="control-title">Factory Overview &amp; Control Room</h1>
-              <p class="view-sub" id="plant-name">Live plant status, machine sensor telemetry, early warning trends and incoming alerts.</p>
-            </div>
-            <button class="btn btn-ghost btn-sm" id="btn-about-data" aria-haspopup="dialog">ⓘ About this demo plant data</button>
-          </div>
-
-          <form class="quick-report" id="quick-report" autocomplete="off">
-            <label for="quick-report-input" class="quick-report-label"><span aria-hidden="true">⚡</span> Quick Disruption Intake:</label>
-            <input id="quick-report-input" type="text" placeholder="e.g. “M17 is down for about 6 hours, protect high-priority orders”">
-            <button type="submit" class="btn btn-primary">Analyze in Studio →</button>
-          </form>
-
-          <div class="kpi-row" id="kpi-row">
-            <div class="kpi skeleton"></div><div class="kpi skeleton"></div>
-          </div>
-
-          <div class="grid-2">
-            <section class="card" aria-labelledby="alerts-title">
-              <div class="card-head">
-                <div>
-                  <h2 id="alerts-title">Needs Action Now</h2>
-                  <p class="card-sub">Active machine faults and urgent predictive alarms.</p>
-                </div>
-                <button class="btn btn-demo btn-sm" id="btn-simulate-fault"
-                  title="Simulates an automatic PLC/MES fault event">🧪 Demo: simulate fault</button>
+          
+          <!-- Compact Operations Cockpit Header Bar -->
+          <div class="cockpit-header-bar">
+            <div class="chb-left">
+              <div class="chb-title-group">
+                <h1 id="control-title" class="cockpit-title">Factory Operations Cockpit</h1>
+                <span class="chb-plant-name" id="plant-name">Stuttgart High-Tech Assembly Plant</span>
               </div>
-              <div id="alert-list" class="alert-list" aria-live="polite">
-                <div class="skeleton-block"></div>
-              </div>
-            </section>
-
-            <section class="card" aria-labelledby="watch-title">
-              <div class="card-head">
-                <div>
-                  <h2 id="watch-title">Machine Health Trends</h2>
-                  <p class="card-sub">Machines whose telemetry trends forecast degradation within 36 hours.</p>
-                </div>
-              </div>
-              <div id="watch-list" class="watch-list">
-                <div class="skeleton-block"></div>
-              </div>
-            </section>
-          </div>
-
-          <section class="card" aria-labelledby="lines-title">
-            <div class="card-head">
-              <div>
-                <h2 id="lines-title">Plant Topology &amp; Line Status</h2>
-                <p class="card-sub">Production stations in process order. Click any machine to simulate an outage.</p>
-              </div>
-              <div class="legend" aria-hidden="true">
-                <span>⚠ Degraded</span>
-                <span>🔧 Maintenance</span>
-                <span>✕ Down</span>
+              <div class="chb-tags">
+                <span class="badge-status-dot pulse" id="cockpit-live-status-pill">● 2 Active Disruptions (1 Urgent)</span>
+                <span class="data-provenance-tag" title="Deterministic Python optimization over SQLite database. No live PLC feed connected.">
+                  <span class="dp-dot"></span> SYNTHETIC DEMO DATASET · NO LIVE PLC FEED
+                </span>
               </div>
             </div>
-            <div id="line-map" class="plant-map"></div>
+            <div class="chb-right">
+              <button type="button" class="btn btn-demo btn-xs" id="btn-simulate-fault" title="Simulates a shop-floor PLC/MES fault event">🧪 Demo: Simulate Fault</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="btn-about-data" aria-haspopup="dialog">ⓘ Data Notice</button>
+            </div>
+          </div>
+
+          <!-- FIRST-VIEWPORT COCKPIT DECK: 3 Essential Visual Operations Panels -->
+          <div class="cockpit-deck">
+            
+            <!-- PANEL 1: Fleet Machine Health Distribution -->
+            <div class="cockpit-card" id="cockpit-fleet-card">
+              <div class="cockpit-card-head">
+                <div class="cch-title">
+                  <span class="cch-icon" aria-hidden="true">⚙</span>
+                  <h2>Machine Fleet Health</h2>
+                </div>
+                <span class="cch-badge mono" id="fleet-total-count">-- Assets</span>
+              </div>
+
+              <!-- Segmented Proportional Health Bar -->
+              <div class="fleet-segmented-bar" id="fleet-health-bar" role="img" aria-label="Fleet health status breakdown">
+                <!-- Rendered dynamically: Running (Green), Degraded (Amber), Stopped (Red), Unknown (Gray) -->
+              </div>
+
+              <!-- Interactive Clickable Status Filter Chips -->
+              <div class="fleet-status-chips" id="fleet-status-chips">
+                <button type="button" class="fleet-chip chip-normal" data-status="HEALTHY" title="Click to filter machine table: Healthy (Authoritative DB State)">
+                  <span class="fc-dot">●</span>
+                  <span class="fc-val" id="cnt-fleet-normal">--</span>
+                  <span class="fc-lbl">Running</span>
+                </button>
+                <button type="button" class="fleet-chip chip-risk" data-status="DEGRADED" title="Click to filter machine table: Degraded (Authoritative DB State)">
+                  <span class="fc-dot">▲</span>
+                  <span class="fc-val" id="cnt-fleet-risk">--</span>
+                  <span class="fc-lbl">Degraded</span>
+                </button>
+                <button type="button" class="fleet-chip chip-stopped" data-status="STOPPED" title="Click to filter machine table: Stopped / Maintenance (Authoritative DB State)">
+                  <span class="fc-dot">■</span>
+                  <span class="fc-val" id="cnt-fleet-stopped">--</span>
+                  <span class="fc-lbl">Stopped</span>
+                </button>
+                <button type="button" class="fleet-chip chip-watch" data-status="WATCH" title="Click to filter machine table: Predictive Telemetry Watch (Separate Risk Indicator)">
+                  <span class="fc-dot">⚡</span>
+                  <span class="fc-val" id="cnt-fleet-watch">--</span>
+                  <span class="fc-lbl">Under Watch</span>
+                </button>
+              </div>
+
+              <!-- Fleet Health Operational Note -->
+              <div class="cockpit-card-foot" id="fleet-summary-note">
+                <span class="cfn-icon">ℹ</span>
+                <span class="cfn-text" id="fleet-note-text">Loading shop-floor asset telemetry status…</span>
+              </div>
+            </div>
+
+            <!-- PANEL 2: Production Lines & Capacity Utilization -->
+            <div class="cockpit-card" id="cockpit-lines-card">
+              <div class="cockpit-card-head">
+                <div class="cch-title">
+                  <span class="cch-icon" aria-hidden="true">📈</span>
+                  <h2>Line Performance &amp; Utilization</h2>
+                </div>
+                <span class="cch-badge mono" id="plant-util-badge">--% Plant Util</span>
+              </div>
+
+              <!-- 3 Lines Utilization Bars -->
+              <div class="cockpit-lines-list" id="cockpit-lines-list">
+                <!-- Rendered dynamically via JS: Line A, Line B, Line C -->
+              </div>
+
+              <div class="cockpit-card-foot">
+                <span class="cfn-icon">⚖</span>
+                <span class="cfn-text" id="lines-note-text">Scheduled 24h demand vs rated bottleneck line capacity.</span>
+              </div>
+            </div>
+
+            <!-- PANEL 3: Customer Orders & Delivery Risk Exposure -->
+            <div class="cockpit-card" id="cockpit-orders-card">
+              <div class="cockpit-card-head">
+                <div class="cch-title">
+                  <span class="cch-icon" aria-hidden="true">📦</span>
+                  <h2>Customer Delivery Exposure</h2>
+                </div>
+                <span class="cch-badge mono" id="orders-total-badge">-- Orders</span>
+              </div>
+
+              <!-- Visual Delivery Risk Meter -->
+              <div class="delivery-risk-visual" id="delivery-risk-visual">
+                <div class="drv-bar-wrap">
+                  <div class="drv-bar-nominal" id="drv-bar-nominal" style="flex: 1;"></div>
+                  <div class="drv-bar-elevated" id="drv-bar-elevated" style="flex: 0;"></div>
+                </div>
+                <div class="drv-legend">
+                  <span class="drv-leg-item"><span class="leg-box leg-ok"></span> <strong id="cnt-orders-nominal">--</strong> Nominal</span>
+                  <span class="drv-leg-item"><span class="leg-box leg-warn"></span> <strong id="cnt-orders-elevated">--</strong> Elevated Risk</span>
+                </div>
+              </div>
+
+              <!-- Key Exposure Numbers -->
+              <div class="exposure-metrics-grid">
+                <div class="em-item">
+                  <span class="em-val highlight" id="cnt-due-24h">--</span>
+                  <span class="em-lbl">Due in 24 Hours</span>
+                </div>
+                <div class="em-item">
+                  <span class="em-val danger" id="cnt-high-pri-due">--</span>
+                  <span class="em-lbl">High-Priority Due</span>
+                </div>
+                <div class="em-item">
+                  <span class="em-val warn" id="cnt-orders-impacted-line">--</span>
+                  <span class="em-lbl">On Disrupted Lines</span>
+                </div>
+              </div>
+
+              <div class="cockpit-card-foot">
+                <span class="cfn-icon">⚠</span>
+                <span class="cfn-text">Rule-based indicator: Orders on disrupted lines due ≤24h are flagged as elevated commitment risk (heuristic indicator, not confirmed late delivery). All orders on disrupted lines are monitored as line exposure.</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- PRIORITIZED INCIDENT QUEUE (The Nerve Center) -->
+          <section class="cockpit-section" id="sec-alerts" aria-labelledby="alerts-title">
+            <div class="cockpit-section-head">
+              <div class="csh-left">
+                <h2 id="alerts-title">Needs Action First (Prioritized Incident Queue)</h2>
+                <span class="csh-sub">Disruptions ranked by machine unavailability, capacity loss, and exposed delivery commitments.</span>
+              </div>
+              <div class="filter-chips-row" id="incident-filter-chips" role="group" aria-label="Incident Filter">
+                <button type="button" class="chip-filter active" data-filter="all">All (<span id="cnt-incidents-all">0</span>)</button>
+                <button type="button" class="chip-filter" data-filter="urgent">Urgent (<span id="cnt-incidents-urgent">0</span>)</button>
+                <button type="button" class="chip-filter" data-filter="fault">Faults (<span id="cnt-incidents-fault">0</span>)</button>
+                <button type="button" class="chip-filter" data-filter="predictive">Predictive Warnings (<span id="cnt-incidents-pred">0</span>)</button>
+              </div>
+            </div>
+
+            <!-- Structured Scannable Incident Table / Row Queue -->
+            <div class="incident-queue-table" id="alert-list" aria-live="polite">
+              <div class="skeleton-block" style="height:120px;"></div>
+            </div>
           </section>
+
+          <!-- BELOW-THE-FOLD: Drill-down Inventory & Orders Tabs -->
+          <section class="cockpit-section" id="sec-deeper-monitoring">
+            <div class="cockpit-tab-bar" role="tablist">
+              <button type="button" class="cockpit-tab-btn active" id="tab-btn-inventory" role="tab" aria-selected="true" data-tab="inventory">
+                <span>Machine Inventory (<span id="cnt-tab-machines">--</span>)</span>
+              </button>
+              <button type="button" class="cockpit-tab-btn" id="tab-btn-orders" role="tab" aria-selected="false" data-tab="orders">
+                <span>Production Orders &amp; Delivery Commitments (<span id="cnt-tab-orders">--</span>)</span>
+              </button>
+              <button type="button" class="cockpit-tab-btn" id="tab-btn-telemetry" role="tab" aria-selected="false" data-tab="telemetry">
+                <span>Machine Health Trends &amp; Telemetry (<span id="cnt-tab-watch">--</span>)</span>
+              </button>
+            </div>
+
+            <!-- Tab 1: Machine Inventory Table -->
+            <div class="cockpit-tab-panel" id="panel-inventory">
+              <div class="table-toolbar">
+                <div class="toolbar-left">
+                  <input id="machine-search-input" type="search" class="search-input" placeholder="Search machine ID, type, station..." aria-label="Search machines">
+                  <label class="filter-select-wrap">
+                    <span class="sr-only">Filter by line</span>
+                    <select id="machine-line-filter" class="select-sm">
+                      <option value="ALL">All Production Lines</option>
+                      <option value="LINE_A">Line A</option>
+                      <option value="LINE_B">Line B</option>
+                      <option value="LINE_C">Line C</option>
+                    </select>
+                  </label>
+                  <label class="filter-select-wrap">
+                    <span class="sr-only">Filter by status</span>
+                    <select id="machine-status-filter" class="select-sm">
+                      <option value="ALL">All States</option>
+                      <option value="HEALTHY">Running (Authoritative)</option>
+                      <option value="DEGRADED">Degraded (Authoritative)</option>
+                      <option value="STOPPED">Stopped / Maintenance</option>
+                      <option value="WATCH">Predictive Telemetry Watch</option>
+                    </select>
+                  </label>
+                  <button type="button" class="btn btn-ghost btn-xs" id="btn-reset-machine-filters">Reset</button>
+                </div>
+                <div class="toolbar-right">
+                  <span class="records-count" id="machine-records-count">Showing -- of -- assets</span>
+                  <div class="view-switch-btns">
+                    <button type="button" class="btn btn-xs btn-subtle active" id="btn-toggle-inventory-table">Table</button>
+                    <button type="button" class="btn btn-xs btn-subtle" id="btn-toggle-inventory-map">Topology Map</button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="machine-table-wrap" class="data-table-wrap">
+                <table class="data-table" id="machine-inventory-table">
+                  <thead>
+                    <tr>
+                      <th>Machine ID</th>
+                      <th>Operation</th>
+                      <th>Line &amp; Station</th>
+                      <th>Cycle Time</th>
+                      <th>Rated Capacity</th>
+                      <th>Health Score</th>
+                      <th>Operational State</th>
+                      <th>Risk Indicator</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="machine-table-body">
+                    <tr><td colspan="9" class="empty-note">Loading factory asset inventory...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div id="machine-map-wrap" class="map-wrap" hidden>
+                <div class="legend" aria-hidden="true" style="margin-bottom: 8px;">
+                  <span>🟢 Running Normally</span>
+                  <span>⚠ Degraded</span>
+                  <span>🔧 Maintenance</span>
+                  <span>✕ Down</span>
+                </div>
+                <div id="line-map" class="plant-map"></div>
+              </div>
+            </div>
+
+            <!-- Tab 2: Orders Table -->
+            <div class="cockpit-tab-panel" id="panel-orders" hidden>
+              <div class="table-toolbar">
+                <div class="toolbar-left">
+                  <label class="filter-select-wrap">
+                    <span class="sr-only">Filter orders</span>
+                    <select id="orders-priority-filter" class="select-sm">
+                      <option value="ALL">All Priorities</option>
+                      <option value="HIGH">High Priority Only</option>
+                      <option value="MEDIUM">Medium Priority Only</option>
+                      <option value="LOW">Low Priority Only</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="toolbar-right">
+                  <span class="records-count" id="orders-records-count">Showing -- of -- orders</span>
+                </div>
+              </div>
+
+              <div class="data-table-wrap">
+                <table class="data-table" id="orders-table">
+                  <thead>
+                    <tr>
+                      <th>Order ID</th>
+                      <th>Product Model</th>
+                      <th>Quantity</th>
+                      <th>Priority</th>
+                      <th>Due Time</th>
+                      <th>Assigned Line</th>
+                      <th>Delivery Risk Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="orders-table-body">
+                    <tr><td colspan="7" class="empty-note">Loading customer orders...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Tab 3: Machine Health Trends (Watch List) -->
+            <div class="cockpit-tab-panel" id="panel-telemetry" hidden>
+              <div id="watch-list" class="watch-list-grid">
+                <div class="skeleton-block"></div>
+              </div>
+            </div>
+
+          </section>
+
         </section>
 
         <!-- =================================================================
@@ -846,6 +1224,50 @@
       </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-primary" id="btn-how-enter">Enter Decision Studio →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Machine Detail Modal -->
+  <div class="modal-backdrop" id="machine-modal" hidden>
+    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="machine-modal-title">
+      <div class="modal-head">
+        <div class="modal-title-wrap">
+          <span class="badge badge-mono" id="mm-badge-id">M01</span>
+          <h2 id="machine-modal-title">Machine Specification &amp; Telemetry</h2>
+        </div>
+        <button class="icon-btn" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="machine-modal-body">
+        <div class="skeleton-block"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" data-close>Close</button>
+        <button type="button" class="btn btn-primary" id="btn-modal-simulate-machine">
+          <span>Simulate Outage in Decision Studio</span> →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incident Investigation Modal -->
+  <div class="modal-backdrop" id="incident-modal" hidden>
+    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="incident-modal-title">
+      <div class="modal-head">
+        <div class="modal-title-wrap">
+          <span class="badge badge-danger" id="im-badge-sev">CRITICAL</span>
+          <h2 id="incident-modal-title">Incident Investigation &amp; Ripple Analysis</h2>
+        </div>
+        <button class="icon-btn" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="incident-modal-body">
+        <div class="skeleton-block"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" data-close>Close</button>
+        <button type="button" class="btn btn-primary" id="btn-modal-analyze-incident">
+          <span>Launch Decision Analysis in Studio</span> →
+        </button>
       </div>
     </div>
   </div>

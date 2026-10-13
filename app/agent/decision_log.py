@@ -11,6 +11,7 @@ Storage:
 import json
 import logging
 import os
+import sqlite3
 import threading
 import uuid
 from pathlib import Path
@@ -25,6 +26,33 @@ LOG_OBJECT = os.environ.get("FDE_LOG_OBJECT", "decision_log.json")
 _lock = threading.Lock()
 _entries: Optional[List[Dict[str, Any]]] = None
 _bucket = None
+
+
+def _audit_db_path() -> Path:
+    return LOG_PATH.parent / "decision_audit.db"
+
+
+def _init_db(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS approved_decisions (
+            decision_id TEXT PRIMARY KEY,
+            fingerprint TEXT NOT NULL,
+            idempotency_key TEXT,
+            data_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_decision_fingerprint ON approved_decisions(fingerprint)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_decision_idempotency_key ON approved_decisions(idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key != ''")
+    conn.commit()
+
+
+def _get_conn() -> sqlite3.Connection:
+    db_path = _audit_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path), timeout=30.0)
+    _init_db(conn)
+    return conn
 
 
 def _bucket_name() -> str:
@@ -82,12 +110,67 @@ def _load() -> List[Dict[str, Any]]:
 
 def record(entry: Dict[str, Any]) -> Dict[str, Any]:
     with _lock:
-        entry = {"decision_id": f"DEC-{uuid.uuid4().hex[:8].upper()}", **entry}
-        _load().insert(0, entry)
+        fingerprint = entry.get("fingerprint") or f"FP-{uuid.uuid4().hex}"
+        idempotency_key = entry.get("idempotency_key") or None
+
+        # Check existing in SQLite database
+        conn = None
+        try:
+            conn = _get_conn()
+            cursor = conn.cursor()
+            clauses = []
+            params = []
+            if idempotency_key:
+                clauses.append("idempotency_key = ?")
+                params.append(idempotency_key)
+            if fingerprint:
+                clauses.append("fingerprint = ?")
+                params.append(fingerprint)
+            if clauses:
+                cursor.execute(
+                    f"SELECT data_json FROM approved_decisions WHERE {' OR '.join(clauses)} ORDER BY rowid DESC LIMIT 1",
+                    params
+                )
+                row = cursor.fetchone()
+                if row:
+                    conn.close()
+                    return json.loads(row[0])
+        except Exception as e:
+            logger.warning(f"Error querying audit database: {e}")
+
+        decision_id = entry.get("decision_id") or f"DEC-{uuid.uuid4().hex[:8].upper()}"
+        full_entry = {"decision_id": decision_id, **entry}
+
+        # Atomically insert into SQLite with unique constraints
+        if conn is not None:
+            try:
+                with conn:
+                    conn.execute(
+                        "INSERT INTO approved_decisions (decision_id, fingerprint, idempotency_key, data_json) VALUES (?, ?, ?, ?)",
+                        (decision_id, fingerprint, idempotency_key, json.dumps(full_entry, default=str))
+                    )
+            except sqlite3.IntegrityError:
+                # Concurrent duplicate was committed: fetch it atomically
+                cursor = conn.execute(
+                    "SELECT data_json FROM approved_decisions WHERE (idempotency_key IS NOT NULL AND idempotency_key = ?) OR fingerprint = ? LIMIT 1",
+                    (idempotency_key, fingerprint)
+                )
+                row = cursor.fetchone()
+                conn.close()
+                if row:
+                    return json.loads(row[0])
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        # Update in-memory and JSON file mirror
+        _load().insert(0, full_entry)
         if _bucket_name():
             try:
-                _record_remote(entry)
-                return entry
+                _record_remote(full_entry)
+                return full_entry
             except Exception as e:
                 logger.warning(f"Could not write decision log to Cloud Storage, keeping it locally: {e}")
         try:
@@ -95,7 +178,7 @@ def record(entry: Dict[str, Any]) -> Dict[str, Any]:
             LOG_PATH.write_text(json.dumps(_entries, indent=2, default=str), encoding="utf-8")
         except Exception as e:
             logger.warning(f"Could not persist decision log: {e}")
-        return entry
+        return full_entry
 
 
 def list_entries(limit: int = 50) -> List[Dict[str, Any]]:
@@ -105,4 +188,14 @@ def list_entries(limit: int = 50) -> List[Dict[str, Any]]:
                 return _read_remote()[0][:limit]
             except Exception as e:
                 logger.warning(f"Could not read decision log from Cloud Storage, showing local copy: {e}")
+        try:
+            conn = _get_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT data_json FROM approved_decisions ORDER BY rowid DESC LIMIT ?", (limit,))
+            rows = cursor.fetchall()
+            conn.close()
+            if rows:
+                return [json.loads(r[0]) for r in rows]
+        except Exception as e:
+            logger.warning(f"Error reading audit database: {e}")
         return list(_load()[:limit])

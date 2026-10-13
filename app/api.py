@@ -6,6 +6,8 @@ Directs requests to FactoryDecisionAgent without duplicating simulation or optim
 Endpoints are synchronous (FastAPI runs them in a worker thread) because the agent performs
 blocking model and database calls. A lock serializes access to the shared conversational agent.
 """
+import hashlib
+import json
 import logging
 import threading
 from collections import Counter
@@ -90,9 +92,15 @@ async def revalidate_ui_assets(request, call_next):
 # Instantiate the central decision agent (preserves immutability of factory database)
 agent = FactoryDecisionAgent()
 agent_lock = threading.Lock()
+_approval_lock = threading.Lock()
 
 class AnalyzeRequest(BaseModel):
-    prompt: str = Field(..., description="Natural-language operational scenario or disruption prompt")
+    prompt: Optional[str] = Field(None, description="Natural-language operational scenario or disruption prompt")
+    machine_id: Optional[str] = Field(None, description="Direct target machine ID for manual scenario entry")
+    downtime_hours: Optional[float] = Field(None, description="Direct downtime hours for manual scenario entry")
+    constraints: Optional[Dict[str, bool]] = Field(None, description="Explicit operational constraints e.g. disallow_overtime")
+    priorities: Optional[Any] = Field(None, description="Explicit priorities or weights e.g. 'minimize cost'")
+    incident_id: Optional[str] = Field(None, description="Originating incident ID if alert-driven")
     previous_response: Optional[DecisionResponse] = Field(None, description="Previous DecisionResponse object for follow-up sensitivity context")
 
 class WhatIfRequest(BaseModel):
@@ -110,6 +118,7 @@ class ApproveRequest(BaseModel):
     decision: DecisionResponse = Field(..., description="Decision being approved")
     approver: str = Field(..., min_length=1, description="Name/role of the approving person")
     note: Optional[str] = Field(None, description="Optional approval note")
+    idempotency_key: Optional[str] = Field(None, description="Optional stable client idempotency key")
 
 @app.get("/api/health")
 def health_check():
@@ -145,8 +154,16 @@ def analyze_scenario(req: AnalyzeRequest):
     """
     Primary endpoint: Analyze a disruption scenario.
     Dispatches to FactoryDecisionAgent, maintaining numerical authority in Python.
+    Supports:
+    1. Alert-driven entry (incident_id, prefilled context)
+    2. Manual scenario entry (machine_id, downtime_hours, constraints)
+    3. Natural-language prompt
+    All paths converge on the exact same deterministic simulation and evaluation engine.
     """
-    if not req.prompt or not req.prompt.strip():
+    has_prompt = bool(req.prompt and req.prompt.strip())
+    has_manual = bool(req.machine_id and req.downtime_hours is not None)
+
+    if not has_prompt and not has_manual:
         raise HTTPException(status_code=400, detail="Scenario prompt cannot be empty.")
 
     try:
@@ -154,7 +171,27 @@ def analyze_scenario(req: AnalyzeRequest):
             # No previous decision means a new conversation: never inherit another client's scenario
             if req.previous_response is None:
                 agent.reset_state()
-            return agent.run(req.prompt.strip(), previous_response=req.previous_response)
+
+            # Manual / direct parameter entry path
+            if has_manual:
+                if req.downtime_hours <= 0:
+                    raise HTTPException(status_code=400, detail="Downtime hours must be greater than zero.")
+                mid = req.machine_id.strip().upper()
+                res = agent.orchestrate_scenario(
+                    machine_id=mid,
+                    downtime_hours=float(req.downtime_hours),
+                    priorities=req.priorities,
+                    constraints=req.constraints,
+                )
+                if req.incident_id:
+                    res.scenario_summary = f"[{req.incident_id}] {res.scenario_summary}"
+                return res
+
+            # Natural-language prompt path
+            res = agent.run(req.prompt.strip(), previous_response=req.previous_response)
+            if req.incident_id:
+                res.scenario_summary = f"[{req.incident_id}] {res.scenario_summary}"
+            return res
     except UnknownMachineError as e:
         logger.warning(f"Unknown machine error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -237,18 +274,49 @@ def approve_decision(req: ApproveRequest):
     Record a human approval and draft the post-approval communication pack.
     Nothing is dispatched to shop-floor systems; documents are drafts for people to send.
     """
-    if req.decision.selected_plan is None:
-        raise HTTPException(status_code=400, detail="This decision has no feasible plan to approve.")
-    pack = generate_action_documents(agent.llm, req.decision, req.approver.strip(), req.note)
-    entry = decision_log.record({
-        **pack,
-        "domain": domains.current_domain(),
-        "machine_id": req.decision.impact_summary.get("machine_id"),
-        "downtime_hours": req.decision.impact_summary.get("downtime_hours"),
-        "execution_mode": req.decision.execution_mode,
+    if req.decision.selected_plan is None or not req.decision.selected_plan.is_feasible:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot approve an infeasible plan or a decision without a selected recovery plan."
+        )
+
+    approver = req.approver.strip()
+    mach_id = req.decision.impact_summary.get("machine_id")
+    dt_hours = req.decision.impact_summary.get("downtime_hours")
+
+    # Complete decision fingerprint: includes scenario, weights, loss, plan, cost, and approver
+    decision_signature = {
+        "scenario": req.decision.scenario_summary,
+        "machine_id": mach_id,
+        "downtime_hours": dt_hours,
+        "capacity_loss": req.decision.impact_summary.get("capacity_loss_units"),
+        "plan_id": req.decision.selected_plan.plan_id,
         "cost_impact_usd": req.decision.selected_plan.cost_impact_usd,
-    })
-    return entry
+        "objective_weights": req.decision.objective_weights,
+        "approver": approver,
+        "idempotency_key": req.idempotency_key or "",
+    }
+    fingerprint = hashlib.sha256(json.dumps(decision_signature, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    with _approval_lock:
+        for existing in decision_log.list_entries(50):
+            if req.idempotency_key and existing.get("idempotency_key") == req.idempotency_key:
+                return existing
+            if existing.get("fingerprint") == fingerprint:
+                return existing
+
+        pack = generate_action_documents(agent.llm, req.decision, approver, req.note)
+        entry = decision_log.record({
+            **pack,
+            "fingerprint": fingerprint,
+            "idempotency_key": req.idempotency_key,
+            "domain": domains.current_domain(),
+            "machine_id": mach_id,
+            "downtime_hours": dt_hours,
+            "execution_mode": req.decision.execution_mode,
+            "cost_impact_usd": req.decision.selected_plan.cost_impact_usd,
+        })
+        return entry
 
 @app.get("/api/decisions")
 def list_decisions(limit: int = 50):
@@ -257,51 +325,158 @@ def list_decisions(limit: int = 50):
 
 @app.get("/api/factory/overview")
 def factory_overview():
-    """Plant snapshot for the Control Room view."""
+    """Plant snapshot for the Factory Overview and Control Room."""
     from app.factory.state import get_factory_state
+    from app.prediction.alerts import list_alerts
 
     state = get_factory_state()
     plant_clock = config.PLANT_CLOCK
     station_names = {s.station_id: s.name for s in state.stations}
+    station_ops = {s.station_id: s.operation_type for s in state.stations}
+    station_caps = {s.station_id: s.capacity_per_hour for s in state.stations}
     status_counts = Counter(m.status.value for m in state.machines)
     orders = state.production_orders
     due_soon = [o for o in orders if o.due_time <= plant_clock + timedelta(hours=24)]
 
+    # Identify lines and stations with impacted machines (DOWN or DEGRADED)
+    impacted_machine_ids = {m.machine_id for m in state.machines if m.status.value in ("DOWN", "DEGRADED", "MAINTENANCE")}
+    impacted_line_ids = {m.line_id for m in state.machines if m.machine_id in impacted_machine_ids}
+
+    # All alerts to attach to machines
+    alerts = list_alerts(_watch_list())
+    machine_alert_map = {a["machine_id"]: a["alert_id"] for a in alerts if "machine_id" in a}
+
     lines = []
+    total_capacity = 0.0
+    total_scheduled_24h_units = 0
+
     for line in state.production_lines:
-        machines = [m for m in state.machines if m.line_id == line.line_id]
+        line_machines = [m for m in state.machines if m.line_id == line.line_id]
+        line_stations = [s for s in state.stations if s.line_id == line.line_id]
         line_orders = [o for o in orders if o.assigned_line == line.line_id]
+        line_due_soon = [o for o in line_orders if o.due_time <= plant_clock + timedelta(hours=24)]
+
+        # Calculate scheduled demand in units
+        units_24h = sum(o.quantity for o in line_due_soon)
+        total_scheduled_24h_units += units_24h
+
+        # Line capacity over 24h
+        daily_capacity = line.capacity_per_hour * 24.0
+        total_capacity += line.capacity_per_hour
+        utilization_pct = round(min(100.0, (units_24h / daily_capacity * 100.0)), 1) if daily_capacity > 0 else None
+
+        # Bottleneck station: minimum capacity_per_hour among stations on this line
+        bottleneck = min(line_stations, key=lambda s: s.capacity_per_hour) if line_stations else None
+
         lines.append({
             "line_id": line.line_id,
             "name": line.name,
             "supported_models": line.supported_models,
             "capacity_per_hour": line.capacity_per_hour,
+            "capacity_24h": daily_capacity,
+            "scheduled_units_24h": units_24h,
+            "utilization_pct": utilization_pct,
             "order_count": len(line_orders),
             "high_priority_orders": sum(1 for o in line_orders if o.priority.value == "HIGH"),
+            "bottleneck_station": {
+                "station_id": bottleneck.station_id if bottleneck else None,
+                "name": bottleneck.name if bottleneck else None,
+                "capacity_per_hour": bottleneck.capacity_per_hour if bottleneck else None,
+            } if bottleneck else None,
+            "status": "IMPACTED" if line.line_id in impacted_line_ids else "OPERATIONAL",
             "machines": [
                 {
                     "machine_id": m.machine_id,
                     "type": m.machine_type,
+                    "station_id": m.station_id,
                     "station": station_names.get(m.station_id, m.station_id),
+                    "operation_type": station_ops.get(m.station_id, "UNKNOWN"),
+                    "cycle_time_seconds": m.cycle_time_seconds,
+                    "capacity_per_hour": m.capacity_per_hour,
                     "status": m.status.value,
                     "health": m.health_score,
+                    "line_id": line.line_id,
+                    "line_name": line.name,
+                    "active_alert_id": machine_alert_map.get(m.machine_id),
                 }
-                for m in machines
+                for m in line_machines
             ],
         })
 
+    total_factory_24h_cap = total_capacity * 24.0
+    factory_utilization = round(min(100.0, (total_scheduled_24h_units / total_factory_24h_cap * 100.0)), 1) if total_factory_24h_cap > 0 else None
+
+    # Line disruption exposure: all active orders on lines experiencing stoppage or degradation
+    line_impacted_orders = [o for o in orders if o.assigned_line in impacted_line_ids and o.status.value in ("PLANNED", "IN_PROGRESS")]
+    # Demonstrably elevated delivery risk: orders scheduled on disrupted lines AND due within the next 24 hours
+    delivery_risk_orders = [o for o in line_impacted_orders if o in due_soon]
+
+    # Maintenance events
+    active_maintenance = [
+        {
+            "maintenance_id": me.maintenance_id,
+            "machine_id": me.machine_id,
+            "maintenance_type": me.maintenance_type.value,
+            "status": me.status.value,
+            "start_time": me.start_time.isoformat(),
+            "duration_hours": me.duration_hours,
+        }
+        for me in state.maintenance_events
+    ]
+
     return {
-        "plant": {"name": state.factory.name if state.factory else "Plant", "location": state.factory.location if state.factory else ""},
+        "plant": {
+            "name": state.factory.name if state.factory else "Plant",
+            "location": state.factory.location if state.factory else "",
+            "operating_hours": state.factory.operating_hours if state.factory else 24.0,
+        },
+        "data_mode": {
+            "mode": "synthetic_demo",
+            "label": "Synthetic Demonstration Dataset",
+            "description": "Deterministic manufacturing simulation engine using reproducible SQLite shop-floor database.",
+            "live_integration_status": "Simulated Plant State (No live industrial PLC connection claimed)",
+            "delivery_risk_rule": "Rule-based indicator: Orders on disrupted lines due within 24h are flagged as ELEVATED delivery commitment risk (heuristic indicator, not a confirmed late-delivery prediction). Other orders on disrupted lines are monitored as line exposure.",
+        },
         "plant_clock": plant_clock.isoformat(),
         "kpis": {
             "machines_total": len(state.machines),
             "machines_by_status": dict(status_counts),
+            "machines_running": status_counts.get("HEALTHY", 0),
+            "machines_degraded": status_counts.get("DEGRADED", 0),
+            "machines_stopped": status_counts.get("DOWN", 0) + status_counts.get("MAINTENANCE", 0),
+            "machines_unknown": 0,
             "orders_active": len(orders),
             "orders_high_priority": sum(1 for o in orders if o.priority.value == "HIGH"),
             "orders_due_24h": len(due_soon),
             "high_priority_due_24h": sum(1 for o in due_soon if o.priority.value == "HIGH"),
+            "orders_line_exposure": len(line_impacted_orders),
+            "orders_delivery_risk_elevated": len(delivery_risk_orders),
+            "high_priority_delivery_risk": sum(1 for o in delivery_risk_orders if o.priority.value == "HIGH"),
+            "orders_at_risk": len(delivery_risk_orders),
+            "high_priority_at_risk": sum(1 for o in delivery_risk_orders if o.priority.value == "HIGH"),
+            "total_capacity_per_hour": total_capacity,
+            "total_scheduled_24h_units": total_scheduled_24h_units,
+            "factory_utilization_pct": factory_utilization,
+            "active_incidents_count": len(alerts),
+            "active_incidents_urgent": sum(1 for a in alerts if a.get("severity") in ("CRITICAL", "HIGH")),
         },
         "lines": lines,
+        "orders": [
+            {
+                "order_id": o.order_id,
+                "product_model": o.product_model,
+                "quantity": o.quantity,
+                "priority": o.priority.value,
+                "due_time": o.due_time.isoformat(),
+                "assigned_line": o.assigned_line,
+                "status": o.status.value,
+                "delivery_risk": "ELEVATED" if o in delivery_risk_orders else ("MONITORED_LINE_EXPOSURE" if o.assigned_line in impacted_line_ids else "NOMINAL"),
+                "line_impacted": o.assigned_line in impacted_line_ids,
+                "is_due_24h": o in due_soon,
+            }
+            for o in sorted(orders, key=lambda o: (0 if o.priority.value == "HIGH" else 1 if o.priority.value == "MEDIUM" else 2, o.due_time))
+        ],
+        "maintenance_events": active_maintenance,
     }
 
 _watch_list_cache: Dict[str, list] = {}
@@ -318,6 +493,82 @@ def _watch_list() -> list:
 def watch_list():
     """Machines ranked by predicted risk, with pre-built backup plans for high-risk ones."""
     return {"machines": _watch_list()}
+
+@app.get("/api/machines/{machine_id}")
+def get_machine_detail(machine_id: str):
+    """Full operational detail for a specific machine including telemetry, schedules, maintenance, and alerts."""
+    from app.factory.state import get_machine, get_factory_state
+    from app.prediction.health import get_machine_telemetry
+    from app.prediction.alerts import list_alerts
+
+    mid = machine_id.upper()
+    try:
+        machine = get_machine(mid)
+    except UnknownMachineError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    state = get_factory_state()
+    station = next((s for s in state.stations if s.station_id == machine.station_id), None)
+    line = next((l for l in state.production_lines if l.line_id == machine.line_id), None)
+
+    # Schedules and assigned orders
+    schedules = [s for s in state.production_schedules if s.machine_id == mid]
+    sched_order_ids = {s.order_id for s in schedules}
+    orders = [o for o in state.production_orders if o.order_id in sched_order_ids or o.assigned_line == machine.line_id]
+
+    # Maintenance events
+    maints = [me for me in state.maintenance_events if me.machine_id == mid]
+
+    # Telemetry and early-warning assessment
+    telemetry_data = get_machine_telemetry(mid)
+
+    # Associated alerts
+    all_alerts = list_alerts(_watch_list())
+    machine_alerts = [a for a in all_alerts if a.get("machine_id") == mid]
+
+    return {
+        "machine_id": machine.machine_id,
+        "machine_type": machine.machine_type,
+        "status": machine.status.value,
+        "health_score": machine.health_score,
+        "cycle_time_seconds": machine.cycle_time_seconds,
+        "capacity_per_hour": machine.capacity_per_hour,
+        "station": {
+            "station_id": station.station_id if station else machine.station_id,
+            "name": station.name if station else machine.station_id,
+            "operation_type": station.operation_type if station else "UNKNOWN",
+            "capacity_per_hour": station.capacity_per_hour if station else machine.capacity_per_hour,
+        },
+        "line": {
+            "line_id": line.line_id if line else machine.line_id,
+            "name": line.name if line else machine.line_id,
+            "capacity_per_hour": line.capacity_per_hour if line else 0.0,
+            "supported_models": line.supported_models if line else [],
+        },
+        "scheduled_orders": [
+            {
+                "order_id": o.order_id,
+                "product_model": o.product_model,
+                "quantity": o.quantity,
+                "priority": o.priority.value,
+                "due_time": o.due_time.isoformat(),
+                "status": o.status.value,
+            }
+            for o in orders[:10]
+        ],
+        "maintenance_events": [
+            {
+                "maintenance_id": m.maintenance_id,
+                "maintenance_type": m.maintenance_type.value,
+                "status": m.status.value,
+                "start_time": m.start_time.isoformat(),
+                "duration_hours": m.duration_hours,
+            }
+            for m in maints
+        ],
+        "telemetry": telemetry_data.get("assessment", {}),
+        "alerts": machine_alerts,
+    }
 
 @app.get("/api/machines/{machine_id}/telemetry")
 def machine_telemetry(machine_id: str):

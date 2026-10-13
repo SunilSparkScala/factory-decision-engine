@@ -21,29 +21,34 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
-DEFAULT_MODEL = "gemini-flash-lite-latest"
-DEFAULT_TIMEOUT_MS = 30_000
+DEFAULT_MODEL = "gemini-flash-latest"
+DEFAULT_TIMEOUT_MS = 15_000
 
-# Two ways to reach Gemini:
-# - Gemini API (AI Studio key): free-tier quotas are per model, so roles default to different
-#   Flash-Lite models to spread load (larger Flash models allow only ~20 requests/day there).
-# - Vertex AI (GOOGLE_GENAI_USE_VERTEXAI=TRUE, used on Cloud Run): billed to the GCP project, no
-#   free-tier caps, authenticated by the service account. Vertex has no "-latest" aliases.
-# Any role can be overridden with its environment variable.
+# Supported models per official Gemini API documentation:
+# gemini-2.0 models were shut down on June 1, 2026.
+# gemini-2.5 models return 404 / are restricted.
+# Supported active production models: gemini-flash-latest, gemini-3.1-flash-lite, gemini-3.5-flash-lite.
 ROLE_MODEL_DEFAULTS = {
     #               env var                   AI Studio default            Vertex AI default
-    "assistant": ("FDE_MODEL_ASSISTANT", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"),
-    "specialists": ("FDE_MODEL_SPECIALISTS", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"),
+    "assistant": ("FDE_MODEL_ASSISTANT", "gemini-flash-latest", "gemini-flash-latest"),
+    "specialists": ("FDE_MODEL_SPECIALISTS", "gemini-flash-latest", "gemini-flash-latest"),
 }
 STUDIO_FALLBACK_MODELS = [
-    "gemini-flash-lite-latest",
+    "gemini-flash-latest",
     "gemini-3.1-flash-lite",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-2.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
     "gemini-3.5-flash",
 ]
-VERTEX_FALLBACK_MODELS = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.5-flash-lite"]
-RETRYABLE_MARKERS = ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "overloaded")
+VERTEX_FALLBACK_MODELS = [
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+]
+RETRYABLE_MARKERS = (
+    "429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "overloaded",
+    "504", "DEADLINE_EXCEEDED", "404", "NOT_FOUND"
+)
 
 # Models that recently hit a quota or overload, mapped to the time they may be retried.
 _cooldown_until: Dict[str, float] = {}

@@ -40,7 +40,13 @@ export const api = {
   alerts: () => request("GET", "/api/alerts"),
   simulateFault: () => request("POST", "/api/alerts/simulate"),
   knowledge: () => request("GET", "/api/knowledge"),
-  analyze: (prompt, previous) => request("POST", "/api/analyze", { prompt, previous_response: previous || null }),
+  machineDetail: (machineId) => request("GET", `/api/machines/${encodeURIComponent(machineId)}`),
+  machineTelemetry: (machineId) => request("GET", `/api/machines/${encodeURIComponent(machineId)}/telemetry`),
+  analyze: (payload, previous) => {
+    const body = typeof payload === "string" ? { prompt: payload } : { ...payload };
+    if (previous) body.previous_response = previous;
+    return request("POST", "/api/analyze", body);
+  },
   whatIf: (previous, followUpPrompt) => request("POST", "/api/what-if", { previous_response: previous, follow_up_prompt: followUpPrompt }),
   rerank: (decision, priorities) => request("POST", "/api/rerank", { decision, priorities }),
   review: (decision) => request("POST", "/api/review", { decision }),
