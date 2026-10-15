@@ -1,5 +1,4 @@
-// Decision Workspace: the guided 5-step flow
-// 1 What happened → 2 Impact → 3 Options → 4 Recommendation → 5 Approve
+// Decision Studio: 1 What happened → 2 Impact → 3 Recommendation → 4 Options, then the human approval.
 
 import { $, $$, h, clear, toast, setLoading, renderMarkdown, copyText } from "../dom.js";
 import { api } from "../api.js";
@@ -33,52 +32,6 @@ export function init(context) {
     }
   });
 
-  // Entry mode tab switcher
-  const tabNl = $("#tab-mode-nl");
-  const tabManual = $("#tab-mode-manual");
-  const formNl = $("#scenario-form");
-  const formManual = $("#manual-scenario-form");
-
-  tabNl?.addEventListener("click", () => {
-    tabNl.classList.add("active");
-    tabNl.setAttribute("aria-selected", "true");
-    tabManual?.classList.remove("active");
-    tabManual?.setAttribute("aria-selected", "false");
-    formNl.hidden = false;
-    formManual.hidden = true;
-  });
-
-  tabManual?.addEventListener("click", () => {
-    tabManual.classList.add("active");
-    tabManual.setAttribute("aria-selected", "true");
-    tabNl?.classList.remove("active");
-    tabNl?.setAttribute("aria-selected", "false");
-    formNl.hidden = true;
-    formManual.hidden = false;
-    populateManualMachines();
-  });
-
-  formManual?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const mid = $("#manual-machine-select")?.value;
-    const hrs = parseFloat($("#manual-downtime")?.value || "8");
-    const priorities = $("#manual-priority-select")?.value || "delivery cost";
-    const constraints = {
-      disallow_overtime: $("#manual-disallow-overtime")?.checked || false,
-      disallow_cross_line_transfer: $("#manual-disallow-transfers")?.checked || false,
-      disallow_all_transfers: $("#manual-disallow-transfers")?.checked || false,
-      disallow_queue_reorder: $("#manual-disallow-reorder")?.checked || false,
-    };
-    if (!mid) return;
-    analyze({
-      machine_id: mid,
-      downtime_hours: hrs,
-      constraints,
-      priorities,
-      incident_id: currentIncidentContext?.alert_id || null,
-    }, { fresh: true });
-  });
-
   $("#btn-clear-incident")?.addEventListener("click", () => {
     currentIncidentContext = null;
     const banner = $("#attached-incident-banner");
@@ -88,15 +41,6 @@ export function init(context) {
   $("#btn-return-overview")?.addEventListener("click", () => {
     ctx.showView("control");
   });
-  $("#btn-jump-approve")?.addEventListener("click", () => {
-    document.getElementById("step-approve")?.scrollIntoView({ behavior: "smooth" });
-    const btnApprove = $("#btn-approve");
-    if (btnApprove) {
-      btnApprove.classList.add("pulse");
-      setTimeout(() => btnApprove.classList.remove("pulse"), 2500);
-    }
-  });
-
   // Example reports fill the box so the user sees exactly what will be sent; they press Analyze
   for (const btn of $$("#step-input .example-btn")) {
     btn.addEventListener("click", () => {
@@ -125,27 +69,7 @@ export function init(context) {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#approve-modal").hidden) closeApproval(); });
 }
 
-export function onShow() {
-  populateManualMachines();
-}
-
-export function populateManualMachines() {
-  const sel = $("#manual-machine-select");
-  if (!sel || sel.children.length > 0) return;
-  const lines = state.overview?.lines || [];
-  lines.forEach((l) => {
-    const optgroup = document.createElement("optgroup");
-    optgroup.label = l.name;
-    (l.machines || []).forEach((m) => {
-      const opt = document.createElement("option");
-      opt.value = m.machine_id;
-      opt.textContent = `${m.machine_id} - ${m.type} (${m.station})`;
-      if (m.machine_id === "M17") opt.selected = true;
-      optgroup.appendChild(opt);
-    });
-    sel.appendChild(optgroup);
-  });
-}
+export function onShow() {}
 
 /** Use the industry pack's example sentences and start a clean workspace for the new plant. */
 export function applyPack(pack) {
@@ -166,20 +90,12 @@ export function applyPack(pack) {
   currentIncidentContext = null;
   const incBanner = $("#attached-incident-banner");
   if (incBanner) incBanner.hidden = true;
-  const manualSel = $("#manual-machine-select");
-  if (manualSel) manualSel.innerHTML = "";
-  populateManualMachines();
   state.decision = null;
   hideMessages();
   $("#interpretation").hidden = true;
   $("#approval-result").hidden = true;
   const approveBtn = $("#btn-approve");
   if (approveBtn) approveBtn.disabled = false;
-  const jumpBtn = $("#btn-jump-approve");
-  if (jumpBtn) {
-    jumpBtn.disabled = false;
-    jumpBtn.textContent = "Review & Authorize Plan →";
-  }
   const whatifBanner = $("#whatif-diff-banner");
   if (whatifBanner) whatifBanner.hidden = true;
   clear($("#chat-log"));
@@ -217,16 +133,8 @@ export function analyzeWithIncident(alert) {
     $("#aib-incident-desc").textContent = alert.title;
     banner.hidden = false;
   }
-  const lo = alert.estimated_repair_hours ? alert.estimated_repair_hours[0] : 8.0;
-  const hi = alert.estimated_repair_hours ? alert.estimated_repair_hours[1] : 8.0;
-  const downtime = Math.round((lo + hi) / 2 * 10) / 10;
-  const payload = alert.scenario_payload || {
-    machine_id: alert.machine_id,
-    downtime_hours: downtime,
-    prompt: alert.analysis_prompt,
-  };
-  payload.incident_id = alert.alert_id;
-  analyze(payload, { fresh: true });
+  // The alert's own report goes through the full pipeline: Gemini, engine, specialists
+  analyze({ prompt: alert.analysis_prompt, incident_id: alert.alert_id }, { fresh: true });
 }
 
 // ------------------------------------------------------------------ analyze
@@ -259,9 +167,7 @@ export async function analyze(payload, { fresh = false } = {}) {
   state.lastPrompt = promptText;
   hideMessages();
   const btn = $("#btn-analyze");
-  const btnManual = $("#btn-run-manual");
   setLoading(btn, true);
-  if (btnManual) setLoading(btnManual, true);
   startProgress();
   try {
     const previous = fresh ? null : state.decision;
@@ -273,7 +179,6 @@ export async function analyze(payload, { fresh = false } = {}) {
     showError(e.message);
   } finally {
     setLoading(btn, false);
-    if (btnManual) setLoading(btnManual, false);
     busy = false;
   }
 }
@@ -334,7 +239,6 @@ function render(decision) {
   $("#approval-result").hidden = true;
   $("#btn-approve").disabled = !decision.selected_plan;
   showSteps(true);
-  renderExecutiveBriefing(decision);
   renderImpact(decision);
   renderImpactMap(decision);
   renderOptions(decision);
@@ -342,50 +246,8 @@ function render(decision) {
   reportDegradedAi(decision);
 }
 
-function renderExecutiveBriefing(decision) {
-  const card = $("#executive-decision-briefing");
-  if (!card) return;
-  if (!decision.selected_plan) {
-    card.hidden = true;
-    return;
-  }
-  const imp = decision.impact_summary || {};
-  const plan = decision.selected_plan;
-  const isFeasible = plan.is_feasible !== false;
-
-  const planIdEl = $("#edc-plan-id");
-  const badgeEl = $("#edc-feasibility-badge");
-  const whatEl = $("#edc-what-happened");
-  const orderEl = $("#edc-order-impact");
-  const recEl = $("#edc-rec-action");
-  const costEl = $("#edc-cost-impact");
-  const whyEl = $("#edc-why-text");
-
-  if (planIdEl) planIdEl.textContent = plan.plan_id;
-  if (badgeEl) {
-    badgeEl.textContent = isFeasible ? "FEASIBLE RECOVERY PLAN" : "INFEASIBLE PLAN";
-    badgeEl.className = `badge ${isFeasible ? "badge-ok" : "badge-danger"}`;
-  }
-  if (whatEl) whatEl.textContent = `Machine ${imp.machine_id || "M17"} down for ${num(imp.downtime_hours || 8, 1)}h (${imp.capacity_loss_units || 0} units lost)`;
-  if (orderEl) orderEl.textContent = `${imp.affected_order_count || 0} orders affected (${imp.high_priority_affected_count || 0} high-priority)`;
-  if (recEl) recEl.textContent = plan.description || "Transfer production to candidate machine";
-  if (costEl) costEl.textContent = `${usd(plan.cost_impact_usd || 0)} extra cost · Zero delivery delay penalty`;
-  if (whyEl) {
-    const rawRat = decision.rationale || "";
-    const cleanRat = rawRat.replace(/^#+\s+/gm, "").split("\n\n")[0] || "Selected plan achieves optimal multi-objective score balancing delivery protection and operational costs.";
-    whyEl.textContent = cleanRat.slice(0, 200) + (cleanRat.length > 200 ? "…" : "");
-  }
-
-  card.hidden = false;
-  ctx.setJourneyStep?.(4);
-}
-
 function showSteps(visible) {
   $("#empty-state").hidden = visible;
-  if (!visible) {
-    const briefing = $("#executive-decision-briefing");
-    if (briefing) briefing.hidden = true;
-  }
   for (const id of STEP_IDS) $(id).hidden = !visible;
 }
 
@@ -710,13 +572,16 @@ function renderRecommendation(d) {
       sub ? h("div", { class: "fig-sub" }, sub) : null);
 
   clear($("#rec-figures"),
-    fig("Extra Cost", usd(sp.cost_impact_usd), "Deterministic Simulation"),
-    fig("Weighted Score", sp.weighted_score != null ? sp.weighted_score.toFixed(4) : "—", "Objective Score [0–1]", "Weighted Decision Score across delivery, cost, quality, risk & energy"),
-    fig("Delivery Delay", sp.delivery_delay_score != null ? sp.delivery_delay_score.toFixed(2) : "0.00", deliveryLabel(sp.delivery_delay_score, best).text, "Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty."),
-    fig("Energy Impact", `${num(sp.energy_kwh)} kWh`, "Process Consumption"),
-    fig("Quality Penalty", sp.quality_penalty_score != null ? sp.quality_penalty_score.toFixed(2) : "0.00", qualityLabel(sp.quality_penalty_score).text),
-    fig("Operational Risk", sp.risk_score != null ? sp.risk_score.toFixed(2) : "0.00", riskLabel(sp.risk_score).text),
+    fig("Extra cost", usd(sp.cost_impact_usd), "Calculated by the engine"),
+    fig("Delivery", deliveryLabel(sp.delivery_delay_score, best).text, "Compared with the other options"),
+    fig("Quality risk", qualityLabel(sp.quality_penalty_score).text),
+    fig("Operational risk", riskLabel(sp.risk_score).text),
+    fig("Energy", `${num(sp.energy_kwh)} kWh`),
   );
+
+  // Say honestly who wrote the explanation: Gemini, or the rule-based fallback
+  const aiTag = $("#rec-ai-source");
+  if (aiTag) aiTag.textContent = brief ? "Reasoning: Gemini" : "Reasoning: rule-based (AI not used)";
 
   const why = brief?.why?.length ? brief.why : fallbackWhy(d);
   const watch = brief?.watch_outs?.length ? brief.watch_outs : d.risks;
@@ -904,10 +769,6 @@ function renderEvidence(d) {
           ),
           h("div", { class: "evidence-title" }, ev.title),
           h("blockquote", { class: "evidence-excerpt" }, `“${ev.excerpt}”`),
-          h("div", { class: "evidence-relevance" },
-            h("strong", {}, "Operational Relevance: "),
-            `Governing rule for ${humanize(ev.evidence_category || ev.document_type).toLowerCase()} and equipment safety.`
-          )
         );
       })
     : h("p", { class: "subcard-hint" }, "No supporting engineering document was retrieved for this pattern."));
@@ -978,7 +839,9 @@ async function ask(question) {
             `**Sensitivity What-If Applied:** Overtime disallowed across plant lines.\n\n` +
             `- **Feasible alternatives:** reduced from ${beforeFeasible} to **${afterFeasible}**\n` +
             `- **Infeasible alternatives:** increased from ${beforeInfeasible} to **${afterInfeasible}** *(Overtime plans violated constraint)*\n` +
-            `- **Recommendation:** ${afterSelected === beforeSelected ? `Remains **${afterSelected}** (Transfer to M26), which does not rely on overtime.` : `Updated to **${afterSelected}**.`}`
+            `- **Recommendation:** ${afterSelected === beforeSelected
+              ? `still **${planText(updatedDecision.selected_plan, updatedDecision.impact_summary.machine_id)}**, which does not rely on overtime.`
+              : `now **${planText(updatedDecision.selected_plan, updatedDecision.impact_summary.machine_id)}**.`}`
           )
         )
       ));
@@ -1011,7 +874,6 @@ async function ask(question) {
 function openApproval() {
   const d = state.decision;
   if (!d?.selected_plan) return;
-  ctx.setJourneyStep?.(5);
   const sp = d.selected_plan;
   clear($("#approve-summary"),
     h("div", {}, h("strong", {}, planText(sp, d.impact_summary.machine_id))),
@@ -1032,7 +894,6 @@ function openApproval() {
 function closeApproval() {
   $("#approve-modal").hidden = true;
   $("#btn-approve").focus();
-  if (state.decision) ctx.setJourneyStep?.(4);
 }
 
 async function submitApproval(e) {
@@ -1046,7 +907,6 @@ async function submitApproval(e) {
     const entry = await api.approve(state.decision, name, $("#approver-note").value.trim() || null);
     closeApproval();
     renderApproval(entry);
-    ctx.setJourneyStep?.(5);
     toast(`Decision ${entry.decision_id} approved and logged.`);
   } catch (err) {
     toast(`Approval failed: ${err.message}`, { error: true });
@@ -1088,10 +948,5 @@ function renderApproval(entry) {
     documentTabs(entry.documents));
   box.hidden = false;
   $("#btn-approve").disabled = true;
-  const jumpBtn = $("#btn-jump-approve");
-  if (jumpBtn) {
-    jumpBtn.disabled = true;
-    jumpBtn.textContent = `✓ Plan Approved (${entry.decision_id})`;
-  }
   box.scrollIntoView({ behavior: "smooth", block: "start" });
 }

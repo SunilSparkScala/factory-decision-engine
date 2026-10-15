@@ -4,7 +4,7 @@
 import { h } from "../dom.js";
 
 const DONE_KEY = "fde-tour-done";
-const card = (sel) => () => document.querySelector(sel)?.closest(".card");
+const el = (sel) => () => document.querySelector(sel);
 
 function steps({ plantName, onTryIt }) {
   return [
@@ -13,32 +13,32 @@ function steps({ plantName, onTryIt }) {
       body: `When a machine breaks at ${plantName}, this shows what happens next, the ways to recover, and a recommendation reviewed by AI specialists, so you decide in minutes. AI reasons; every number comes from a deterministic engine.`,
     },
     {
-      target: () => document.querySelector("#kpi-row .kpi-health"),
+      target: el("#cockpit-fleet-card"),
       title: "How the plant is doing",
       body: "Every machine is in exactly one group: running normally, at risk, or stopped, so the three numbers add up to the total. After the tour, click a group to see those machines on the plant map.",
     },
     {
-      target: card("#watch-list"),
+      target: el("#sec-watch"),
       title: "Machine health trends",
       body: "The early-warning radar. We watch every machine's sensors, spot the ones heading for an alarm, and build a backup plan in advance. On the right, the big number is the expected time to the alarm and the small range under it is the likely window.",
     },
     {
-      target: card("#alert-list"),
+      target: el("#sec-alerts"),
       title: "Needs action now",
       body: "In a real plant, machines report faults here automatically. In this demo, the 🧪 button pretends to be a machine sending one. Machines predicted to reach an alarm within 36 hours also show up here. Click “Analyze impact” to get a recovery plan.",
     },
     {
-      target: () => document.querySelector("#quick-report"),
+      target: el("#quick-report"),
       title: "Report a disruption",
       body: "Something the sensors can't see? Type it the way you'd say it, e.g. “M17 is down for about 6 hours, protect high-priority orders”. Gemini works out the machine, the duration and your priorities.",
     },
     {
-      target: () => document.querySelector('.nav-tab[data-view="decide"]'),
-      title: "Decide",
+      target: el('.sidebar-tab[data-view="decide"]'),
+      title: "Decision Studio",
       body: "Every analysis opens here: the impact on lines and orders, the recovery options, the recommendation with the specialists' review, and documents ready once you approve. Nothing happens without your approval.",
     },
     {
-      target: () => document.querySelector(".alert-item.kind-predictive"),
+      target: el(".alert-item.kind-predictive"),
       title: "Try it now",
       body: "This machine still reports “healthy”, but its trend says it will reach an alarm soon. See what the engine recommends before it fails.",
       action: { label: "Analyze it now →", run: onTryIt },

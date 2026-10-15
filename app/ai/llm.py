@@ -21,29 +21,30 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
-DEFAULT_MODEL = "gemini-flash-latest"
-DEFAULT_TIMEOUT_MS = 15_000
+DEFAULT_MODEL = "gemini-flash-lite-latest"
+DEFAULT_TIMEOUT_MS = 30_000
 
-# Supported models per official Gemini API documentation:
-# gemini-2.0 models were shut down on June 1, 2026.
-# gemini-2.5 models return 404 / are restricted.
-# Supported active production models: gemini-flash-latest, gemini-3.1-flash-lite, gemini-3.5-flash-lite.
+# Two ways to reach Gemini (checked 2026-10-14 with a one-word request per model):
+# - Gemini API (AI Studio key): free-tier quotas are per model, so roles default to different
+#   Flash-Lite models to spread load. gemini-flash-latest answered, but took minutes under load.
+# - Vertex AI (GOOGLE_GENAI_USE_VERTEXAI=TRUE, used on Cloud Run): billed to the GCP project,
+#   authenticated by the service account. Vertex has no "-latest" aliases (they return 404).
+# Any role can be overridden with its environment variable.
 ROLE_MODEL_DEFAULTS = {
     #               env var                   AI Studio default            Vertex AI default
-    "assistant": ("FDE_MODEL_ASSISTANT", "gemini-flash-latest", "gemini-flash-latest"),
-    "specialists": ("FDE_MODEL_SPECIALISTS", "gemini-flash-latest", "gemini-flash-latest"),
+    "assistant": ("FDE_MODEL_ASSISTANT", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"),
+    "specialists": ("FDE_MODEL_SPECIALISTS", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"),
 }
 STUDIO_FALLBACK_MODELS = [
-    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
-    "gemini-3.5-flash",
+    "gemini-flash-latest",
 ]
 VERTEX_FALLBACK_MODELS = [
-    "gemini-flash-latest",
-    "gemini-3.1-flash-lite",
     "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
 ]
 RETRYABLE_MARKERS = (
     "429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "overloaded",

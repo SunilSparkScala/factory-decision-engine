@@ -201,11 +201,14 @@ def prebuild_plan(assessment: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "description": sp.description if sp else "No feasible plan; escalate to supervisor.",
         "cost_impact_usd": sp.cost_impact_usd if sp else None,
         "orders_at_risk": decision.impact_summary.get("affected_order_count"),
+        "capacity_loss_units": decision.impact_summary.get("capacity_loss_units"),
         "high_priority_at_risk": decision.impact_summary.get("high_priority_affected_count"),
         "analysis_prompt": (
-            f"{assessment['machine_id']} is at risk of failure ({assessment['explanation']}) "
-            f"If it fails, repair typically takes {lo:g} to {hi:g} hours. Protect high-priority deliveries "
-            f"while keeping cost low."
+            # The only durations in the report are the repair window, so neither Gemini nor the
+            # rule-based fallback can mistake the time-to-alarm for the downtime.
+            f"{assessment['machine_id']} is at risk of failure: its {(assessment.get('driver_signal') or 'sensor').lower()} "
+            f"trend is heading for the alarm level. If it fails, repair typically takes {lo:g} to {hi:g} hours. "
+            f"Protect high-priority deliveries while keeping cost low."
         ),
     }
 
