@@ -63,6 +63,7 @@ export function init(context) {
     chip.addEventListener("click", () => ask(chip.dataset.question));
   }
   $("#btn-approve").addEventListener("click", openApproval);
+  $("#btn-quick-approve")?.addEventListener("click", openApproval);
   $("#approve-form").addEventListener("submit", submitApproval);
   for (const el of $$("#approve-modal [data-close]")) el.addEventListener("click", closeApproval);
   $("#approve-modal").addEventListener("click", (e) => { if (e.target.id === "approve-modal") closeApproval(); });
@@ -96,6 +97,8 @@ export function applyPack(pack) {
   $("#approval-result").hidden = true;
   const approveBtn = $("#btn-approve");
   if (approveBtn) approveBtn.disabled = false;
+  const quickApprove = $("#btn-quick-approve");
+  if (quickApprove) quickApprove.disabled = false;
   const whatifBanner = $("#whatif-diff-banner");
   if (whatifBanner) whatifBanner.hidden = true;
   clear($("#chat-log"));
@@ -238,6 +241,8 @@ function render(decision) {
   state.decision = decision;
   $("#approval-result").hidden = true;
   $("#btn-approve").disabled = !decision.selected_plan;
+  const quickApprove = $("#btn-quick-approve");
+  if (quickApprove) quickApprove.disabled = !decision.selected_plan;
   showSteps(true);
   renderImpact(decision);
   renderImpactMap(decision);
@@ -954,5 +959,7 @@ function renderApproval(entry) {
     documentTabs(entry.documents));
   box.hidden = false;
   $("#btn-approve").disabled = true;
+  const quickApprove = $("#btn-quick-approve");
+  if (quickApprove) quickApprove.disabled = true;
   box.scrollIntoView({ behavior: "smooth", block: "start" });
 }

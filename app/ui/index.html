@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.1">
+  <link rel="stylesheet" href="/static/style.css?v=2.2">
   <script>
     // Apply saved theme before first paint
     try {
@@ -458,7 +458,12 @@
                     <span class="step-num-badge badge-primary-step">3</span>
                     <h2 id="rec-heading" class="section-title">Recommended Recovery Action</h2>
                   </div>
-                  <span class="badge badge-primary-glow" id="rec-status-tag">Recommended</span>
+                  <div class="header-action-group">
+                    <button type="button" class="btn-header-approve" id="btn-quick-approve" title="Review &amp; approve this recommendation">
+                      Approve Plan ✓
+                    </button>
+                    <span class="badge badge-primary-glow" id="rec-status-tag">Recommended</span>
+                  </div>
                 </div>
 
                 <!-- Specialist Objections Callout -->
@@ -925,6 +930,6 @@
   <!-- Toast Container -->
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script type="module" src="/static/app.js?v=2.1"></script>
+  <script type="module" src="/static/app.js?v=2.2"></script>
 </body>
 </html>
