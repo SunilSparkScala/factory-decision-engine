@@ -133,6 +133,73 @@ function renderKpis() {
     ? `● ${state.alerts.length} need${state.alerts.length === 1 ? "s" : ""} action (${urgent} urgent)`
     : "● Nothing needs action";
   pill.className = `badge-status-dot${urgent ? " pulse" : ""}`;
+
+  // Executive KPI Strip rendering
+  const availRateEl = $("#kpi-avail-rate");
+  if (availRateEl) {
+    const operationalCount = (k.machines_running || 0) + (k.machines_degraded || 0);
+    const availPct = total ? ((operationalCount / total) * 100).toFixed(1) : "0.0";
+    availRateEl.textContent = `${availPct}%`;
+    $("#kpi-avail-val").textContent = `${operationalCount} / ${total}`;
+    $("#kpi-avail-breakdown").textContent = `${k.machines_running} healthy · ${k.machines_degraded} degraded · ${k.machines_stopped} stopped`;
+
+    const utilPct = k.factory_utilization_pct != null ? `${k.factory_utilization_pct.toFixed(1)}%` : "—";
+    $("#kpi-util-val").textContent = utilPct;
+    const barEl = $("#kpi-util-bar");
+    if (barEl) barEl.style.width = k.factory_utilization_pct != null ? `${Math.min(100, Math.max(0, k.factory_utilization_pct))}%` : "0%";
+    $("#kpi-util-sub").textContent = k.total_scheduled_24h_units != null ? `${num(k.total_scheduled_24h_units)} units scheduled / 24h` : "No scheduled units";
+
+    $("#kpi-delivery-badge").textContent = `${k.orders_due_24h} Due in 24h`;
+    $("#kpi-delivery-val").textContent = String(k.orders_active);
+    $("#kpi-delivery-sub").textContent = `${k.high_priority_due_24h} high-priority due in 24h (${k.orders_high_priority} total)`;
+
+    const incBadge = $("#kpi-incidents-badge");
+    if (incBadge) {
+      incBadge.textContent = urgent ? `${urgent} Urgent` : "Stable";
+      incBadge.className = `kpi-pill ${urgent ? "kpi-pill-urgent" : "kpi-pill-ok"}`;
+    }
+    $("#kpi-incidents-val").textContent = String(state.alerts.length);
+    const faultCount = state.alerts.filter((a) => a.kind === "fault").length;
+    const predCount = state.alerts.filter((a) => a.kind === "predictive").length;
+    $("#kpi-incidents-sub").textContent = `${faultCount} fault alert · ${predCount} predictive warning`;
+  }
+
+  // Production Line Utilization & Bottlenecks rendering
+  renderLineMeters();
+}
+
+function renderLineMeters() {
+  const grid = $("#cockpit-lines-grid");
+  if (!grid || !state.overview?.lines) return;
+
+  clear(grid, state.overview.lines.map((l) => {
+    const hasUtil = l.utilization_pct != null;
+    const utilVal = hasUtil ? l.utilization_pct : 0;
+    const utilDisplay = hasUtil ? `${num(l.utilization_pct, 1)}%` : "—";
+    const tone = utilVal > 80 ? "danger" : utilVal > 50 ? "primary" : "ok";
+    const statusTone = l.status === "OPERATIONAL" ? "badge-ok" : "badge-warn";
+
+    return h("div", { class: "line-card" },
+      h("div", { class: "line-card-head" },
+        h("div", {},
+          h("h4", { class: "line-title" }, l.name),
+          h("div", { class: "line-models" }, (l.supported_models || []).join(" · "))),
+        h("span", { class: `badge ${statusTone}` }, l.status)),
+      h("div", { class: "line-util-row" },
+        h("div", { class: "line-util-metric" },
+          h("span", { class: "line-util-num" }, utilDisplay),
+          h("span", { class: "line-util-lbl" }, "utilization")),
+        h("div", { class: "line-sched-metric" },
+          h("span", { class: "mono" }, `${num(l.scheduled_units_24h)} / ${num(l.capacity_24h)}`),
+          h("span", { class: "line-util-lbl" }, "units (24h)"))),
+      h("div", { class: "line-progress-wrap" },
+        h("div", { class: `line-progress-fill tone-${tone}`, style: `width: ${hasUtil ? Math.min(100, Math.max(0, utilVal)) : 0}%` })),
+      h("div", { class: "line-card-foot" },
+        h("span", { class: "line-orders-chip" }, `📦 ${l.order_count} orders (${l.high_priority_orders} high-pri)`),
+        l.bottleneck_station ? h("span", { class: "line-bottleneck-chip", title: `Bottleneck station: ${l.bottleneck_station.name}` },
+          `⚡ Bottleneck: ${l.bottleneck_station.station_id?.replace("STA_", "Station ")} (${l.bottleneck_station.capacity_per_hour} u/h)`) : null),
+    );
+  }));
 }
 
 function showMachines(list) {

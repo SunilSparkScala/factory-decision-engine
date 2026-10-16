@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=2.1">
   <script>
     // Apply saved theme before first paint
     try {
@@ -401,14 +401,14 @@
                 <!-- Strategy Cards Grid -->
                 <div class="options-grid" id="option-cards"></div>
 
-                <!-- Workspace Sub-views (Tabs): Candidates Matrix / Plant Transfer Map / Robustness -->
+                <!-- Workspace Sub-views (Tabs): Plant Floor Routing / Candidate Matrix / Robustness -->
                 <div class="subview-tabs-header">
                   <div class="tab-pills" role="tablist">
-                    <button type="button" class="subtab-btn active" data-subtab="candidates" role="tab" aria-selected="true">
-                      Candidates Matrix (<span id="all-candidates-count">10</span>)
-                    </button>
-                    <button type="button" class="subtab-btn" data-subtab="map" role="tab" aria-selected="false">
+                    <button type="button" class="subtab-btn active" data-subtab="map" role="tab" aria-selected="true">
                       Plant Floor Routing
+                    </button>
+                    <button type="button" class="subtab-btn" data-subtab="candidates" role="tab" aria-selected="false">
+                      Candidate Matrix (<span id="all-candidates-count">10</span>)
                     </button>
                     <button type="button" class="subtab-btn" data-subtab="robustness" role="tab" aria-selected="false">
                       Downtime Robustness (1–48h)
@@ -416,21 +416,21 @@
                   </div>
                 </div>
 
-                <!-- Tab 1: Candidates Matrix -->
-                <div class="subtab-panel" id="panel-candidates" role="tabpanel">
-                  <div class="table-wrap">
-                    <table class="data-table" id="candidates-table"></table>
-                  </div>
-                </div>
-
-                <!-- Tab 2: Plant Floor Routing Map -->
-                <div class="subtab-panel" id="panel-map" role="tabpanel" hidden>
+                <!-- Tab 1: Plant Floor Routing Map (Active by default) -->
+                <div class="subtab-panel" id="panel-map" role="tabpanel">
                   <div class="subcard" id="impact-map-card">
                     <div class="subcard-head">
                       <h4>What happens next on the plant floor</h4>
                       <span class="subcard-hint">The broken machine, candidate alternate machines, and the recommended transfer path.</span>
                     </div>
                     <div id="impact-map" class="plant-map"></div>
+                  </div>
+                </div>
+
+                <!-- Tab 2: Candidate Matrix -->
+                <div class="subtab-panel" id="panel-candidates" role="tabpanel" hidden>
+                  <div class="table-wrap">
+                    <table class="data-table" id="candidates-table"></table>
                   </div>
                 </div>
 
@@ -633,6 +633,64 @@
             <button type="submit" class="btn btn-primary btn-sm">Analyze →</button>
           </form>
 
+          <!-- Executive KPI Ribbon: High-signal factory performance overview -->
+          <div class="cockpit-kpi-strip" id="cockpit-kpi-strip" aria-label="Executive Operations Overview">
+            <div class="cockpit-kpi-card" id="kpi-card-availability">
+              <div class="kpi-card-header">
+                <span class="kpi-icon" aria-hidden="true">⚙</span>
+                <span class="kpi-label">Fleet Availability</span>
+                <span class="kpi-pill kpi-pill-ok" id="kpi-avail-rate">--%</span>
+              </div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-avail-val">-- / --</span>
+                <span class="kpi-unit">assets active</span>
+              </div>
+              <div class="kpi-sub" id="kpi-avail-breakdown">Loading fleet status…</div>
+            </div>
+
+            <div class="cockpit-kpi-card" id="kpi-card-throughput">
+              <div class="kpi-card-header">
+                <span class="kpi-icon" aria-hidden="true">📈</span>
+                <span class="kpi-label">Plant Utilization</span>
+                <span class="kpi-pill kpi-pill-neutral" id="kpi-util-pill">24h Schedule</span>
+              </div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-util-val">--%</span>
+                <span class="kpi-unit">overall capacity</span>
+              </div>
+              <div class="kpi-meter-wrap">
+                <div class="kpi-meter-bar" id="kpi-util-bar" style="width: 0%"></div>
+              </div>
+              <div class="kpi-sub" id="kpi-util-sub">Loading scheduled units…</div>
+            </div>
+
+            <div class="cockpit-kpi-card" id="kpi-card-delivery">
+              <div class="kpi-card-header">
+                <span class="kpi-icon" aria-hidden="true">📦</span>
+                <span class="kpi-label">Delivery Commitments</span>
+                <span class="kpi-pill kpi-pill-warn" id="kpi-delivery-badge">-- Due 24h</span>
+              </div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-delivery-val">--</span>
+                <span class="kpi-unit">active orders</span>
+              </div>
+              <div class="kpi-sub" id="kpi-delivery-sub">Loading delivery pressure…</div>
+            </div>
+
+            <div class="cockpit-kpi-card" id="kpi-card-incidents">
+              <div class="kpi-card-header">
+                <span class="kpi-icon" aria-hidden="true">⚡</span>
+                <span class="kpi-label">Disruption Radar</span>
+                <span class="kpi-pill kpi-pill-urgent" id="kpi-incidents-badge">Active</span>
+              </div>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="kpi-incidents-val">--</span>
+                <span class="kpi-unit">warnings</span>
+              </div>
+              <div class="kpi-sub" id="kpi-incidents-sub">Loading disruption radar…</div>
+            </div>
+          </div>
+
           <div class="cockpit-deck cockpit-deck-2">
             <!-- Machine health: three groups that add up to the total -->
             <div class="cockpit-card" id="cockpit-fleet-card">
@@ -675,6 +733,20 @@
                 <span class="cfn-icon" aria-hidden="true">ℹ</span>
                 <span class="cfn-text">These deadlines are what a breakdown puts at risk. Opening an alert shows exactly which orders are affected.</span>
               </div>
+            </div>
+          </div>
+
+          <!-- Production Lines Utilization & Bottlenecks Panel -->
+          <div class="cockpit-lines-panel" id="cockpit-lines-panel">
+            <div class="lines-panel-head">
+              <div class="lph-title">
+                <span class="lph-icon" aria-hidden="true">🏭</span>
+                <h3>Production Line Utilization &amp; Bottlenecks</h3>
+              </div>
+              <span class="lph-sub mono" id="lph-summary-badge">3 Lines Active</span>
+            </div>
+            <div class="lines-grid" id="cockpit-lines-grid">
+              <!-- Dynamically populated line cards -->
             </div>
           </div>
 
@@ -853,6 +925,6 @@
   <!-- Toast Container -->
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script type="module" src="/static/app.js"></script>
+  <script type="module" src="/static/app.js?v=2.1"></script>
 </body>
 </html>

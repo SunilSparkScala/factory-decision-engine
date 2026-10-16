@@ -152,7 +152,7 @@ function initNav() {
     workspace.analyze("M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.", { fresh: true });
   });
 
-  // Subtab switching in Decision Studio (Candidates / Map / Robustness)
+  // Subtab switching in Decision Studio (Routing / Candidates / Robustness)
   for (const btn of $$(".subtab-btn")) {
     btn.addEventListener("click", () => {
       const target = btn.dataset.subtab;
@@ -161,9 +161,12 @@ function initNav() {
         b.classList.toggle("active", isMatch);
         b.setAttribute("aria-selected", String(isMatch));
       }
-      $("#panel-candidates").hidden = target !== "candidates";
       $("#panel-map").hidden = target !== "map";
+      $("#panel-candidates").hidden = target !== "candidates";
       $("#panel-robustness").hidden = target !== "robustness";
+      if (target === "map") {
+        workspace.redrawMap();
+      }
     });
   }
 

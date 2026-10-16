@@ -23,7 +23,7 @@ export function renderPlantMap(container, { lines, atRisk = new Set(), highlight
     const stations = groupByStation(line.machines);
     const cells = [];
     stations.forEach((machines, stationName) => {
-      if (cells.length) cells.push(h("span", { class: "pm-arrow", "aria-hidden": "true" }, "→"));
+      if (cells.length) cells.push(flowArrow());
       cells.push(stationBox(stationName, machines, line, { atRisk, highlight, overlay, onMachine }));
     });
     canvas.appendChild(h("div", { class: "pm-row" },
@@ -53,10 +53,28 @@ function problemOf(m, atRisk) {
   return null;
 }
 
+function flowArrow() {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "pm-flow-icon");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", "M4 8 h8 M8 4 l4 4 -4 4");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(path);
+  return h("div", { class: "pm-arrow" }, svg);
+}
+
 function stationBox(stationName, machines, line, { atRisk, highlight, overlay, onMachine }) {
   const op = stationOperation(stationName);
   const relevant = overlay && machines.some((m) => m.machine_id === overlay.failed || overlay.candidates?.[m.machine_id]);
-  const box = h("div", { class: `pm-station${relevant ? " relevant" : ""}${overlay && !relevant ? " muted" : ""}` },
+  const box = h("div", { class: `pm-station${relevant ? " relevant" : ""}` },
     h("div", { class: "pm-op" }, op));
 
   const chip = (m) => {
@@ -66,9 +84,20 @@ function stationBox(stationName, machines, line, { atRisk, highlight, overlay, o
     let note = `${m.machine_id} · ${machineTypeLabel(m.type)} · ${m.status.toLowerCase()} · health ${m.health}%`;
     if (overlay) {
       const cand = overlay.candidates?.[m.machine_id];
-      if (m.machine_id === overlay.failed) { cls += " failed"; badge = "✕ broken"; }
-      else if (m.machine_id === overlay.target) { cls += " target"; badge = "★ move here"; }
-      else if (cand) { cls += cand.ok ? " can" : " cannot"; badge = cand.ok ? "✓ can help" : "✕ can't"; note += ` · ${cand.note}`; }
+      if (m.machine_id === overlay.failed) {
+        cls += " failed";
+        badge = "✕ broken";
+      } else if (m.machine_id === overlay.target) {
+        cls += " target";
+        badge = "★ move here";
+      } else if (cand) {
+        cls += cand.ok ? " can" : " cannot";
+        badge = cand.ok ? "✓ can help" : "✕ can't";
+        note += ` · ${cand.note}`;
+      } else {
+        cls += " nominal";
+        badge = `● ${m.status.toLowerCase()}`;
+      }
     } else if (problem) {
       cls += ` problem ${problem.cls}`;
       badge = `${problem.icon} ${m.reported ? "fault reported" : problem.text}`;
@@ -84,10 +113,8 @@ function stationBox(stationName, machines, line, { atRisk, highlight, overlay, o
   };
 
   if (overlay) {
-    // Decide view: show every machine where the story happens, keep the rest quiet
-    box.appendChild(relevant
-      ? h("div", { class: "pm-machines" }, machines.map(chip))
-      : h("div", { class: "pm-quiet" }, `${machines.length} machines`));
+    // Decision Studio routing diagram: render full visual station cards with their actual machine nodes
+    box.appendChild(h("div", { class: "pm-machines" }, machines.map(chip)));
     return box;
   }
 
@@ -144,6 +171,8 @@ function drawMoveArrow(canvas, fromId, toId) {
     canvas.appendChild(svg);
   };
   requestAnimationFrame(draw);
+  setTimeout(draw, 60);
+  setTimeout(draw, 240);
   const observer = new ResizeObserver(() => draw());
   observer.observe(canvas);
 }

@@ -8,7 +8,7 @@ import {
   deliveryLabel, qualityLabel, riskLabel, deliveryRiskTone, stanceInfo, presetForWeights, humanize,
   machineTypeLabel, stationOperation,
 } from "../format.js";
-import { renderPlantMap } from "../components/plant-map.js";
+import { renderPlantMap } from "../components/plant-map.js?v=2.1";
 
 const CANONICAL_PROMPT = () => $("#step-input .example-btn[data-example='clear']").dataset.prompt;
 const STEP_IDS = ["#step-impact", "#step-options", "#step-recommendation", "#step-approve"];
@@ -367,6 +367,12 @@ function cantHelpReason(reasons) {
   if (/unavailable with status/i.test(r)) return "machine is offline";
   if (/schedule conflicts/i.test(r)) return "already fully booked";
   return r || "not feasible";
+}
+
+export function redrawMap() {
+  if (state.decision) {
+    renderImpactMap(state.decision);
+  }
 }
 
 /** "What happens next on the plant floor": the broken machine, who can/can't help, where work moves. */
