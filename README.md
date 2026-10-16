@@ -40,26 +40,26 @@ Both packs share one structure and seed, so every calculation is identical; only
 the 18 engineering documents (`knowledge/documents/<pack>/`) and the examples differ. Packs are
 defined in `app/domains/packs.py`; the API reads the pack from the `X-FDE-Domain` header.
 
-## Hack2Skill AI Builder Cup 2026 — Quick Judge Walkthrough
+## Quick walkthrough for judges (3 minutes)
 
-- **Official Judging Compliance Audit:** [docs/HACK2SKILL_JUDGING_COMPLIANCE.md](docs/HACK2SKILL_JUDGING_COMPLIANCE.md)
-- **Media Asset Provenance & License Credits:** [docs/ASSET_CREDITS.md](docs/ASSET_CREDITS.md)
+How the project maps to the judging criteria: [docs/HACK2SKILL_JUDGING_COMPLIANCE.md](docs/HACK2SKILL_JUDGING_COMPLIANCE.md).
 
-### 3-Minute Demonstration Flow
-1. **Explore the Landing Page (`/`):**
-   - Live machine-vision monitor on the left streaming authentic automotive robotics assembly footage (`hero_automotive.mp4`, Engin Altundağ, Pexels).
-   - Core value proposition on the right: *"When a machine stops, production decisions can’t wait."*
-   - Real-time factory floor telemetry marquee ticker streaming line metrics.
-2. **Launch Canonical Scenario:**
-   - Click **"Enter Decision Studio"** or **"Simulate M17 8h disruption"**.
-   - **Step 1 (Scenario):** Canonical M17 8h disruption loaded into the workspace.
-   - **Step 2 (Impact):** Deterministic engine calculates **211.2 lost units (17.6%)**, **6 affected orders**, and **3 exposed high-priority customer deliveries**.
-   - **Step 3 (Alternatives):** Ranks **7 feasible** and **3 infeasible** plans across cost, delivery, quality, risk, and energy.
-   - **Step 4 (Recommendation):** Selects `PLAN_TRANSFER_07` (transfer to M26 at $100 cost, score `0.6881`), reviewed by the 4 AI specialists (Production, Quality, Maintenance, Energy) with grounded citations.
-   - **Step 5 (Human Approval Gate):** Mandatory explicit authorization required before any work orders or supervisor notices are drafted.
-3. **Test Interactive What-If Sensitivity:**
-   - In the scenario box, submit: `What if overtime is not allowed?`
-   - Observe the deterministic engine dynamically transition overtime plans to infeasible (`Overtime is strictly disallowed`), shifting feasible count from 7 → 6 while preserving all baseline M17 parameters.
+1. **Open the app.** A short guided tour starts on the first visit (the **?** button replays it).
+2. **Factory Overview:** machine health (every machine in exactly one group), delivery pressure, what
+   needs action now, machine health trends (M23 still reports healthy but is predicted to reach an
+   alarm in about 17 hours) and a plant map of where the trouble is.
+3. **Open an alert or type a report** (e.g. *"M17 will be unavailable for 8 hours tomorrow. Keep
+   high-priority deliveries on time while minimizing cost."*). In the Decision Studio:
+   - Gemini states what it understood (machine, duration, priorities).
+   - The engine traces the impact: **211.2 units lost (17.6%)**, **6 orders affected, 3 high-priority**.
+   - It checks **10 recovery plans (7 feasible, 3 not possible, each with the reason)** and recommends
+     **moving M17's work to M26 for $100** (`PLAN_TRANSFER_07`).
+   - Four Gemini specialists review the plan with citations; the Decision Lead connects their concerns.
+4. **Change priorities or ask a question.** "No overtime?" in the Ask box re-runs the engine with
+   overtime disallowed (7 → 6 feasible plans); "What if M26 breaks?" makes the ADK agent run a new
+   simulation and shows the tools it used.
+5. **Approve.** Nothing happens without a person's sign-off; the work order, quality notice, schedule
+   changes and customer update are drafted and the decision is logged.
 
 ## Run locally
 

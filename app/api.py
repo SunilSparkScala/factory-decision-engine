@@ -155,9 +155,10 @@ def analyze_scenario(req: AnalyzeRequest):
     Primary endpoint: Analyze a disruption scenario.
     Dispatches to FactoryDecisionAgent, maintaining numerical authority in Python.
     Supports:
-    1. Alert-driven entry (incident_id, prefilled context)
-    2. Manual scenario entry (machine_id, downtime_hours, constraints)
-    3. Natural-language prompt
+    1. Natural-language prompt, optionally tagged with the alert it came from (incident_id):
+       Gemini understanding, deterministic engine, robustness and specialist review
+    2. Direct parameters without a prompt (machine_id, downtime_hours, constraints):
+       deterministic engine only
     All paths converge on the exact same deterministic simulation and evaluation engine.
     """
     has_prompt = bool(req.prompt and req.prompt.strip())
@@ -172,8 +173,9 @@ def analyze_scenario(req: AnalyzeRequest):
             if req.previous_response is None:
                 agent.reset_state()
 
-            # Manual / direct parameter entry path
-            if has_manual:
+            # Direct parameter entry (API clients only): deterministic engine, no AI review.
+            # When a description is also sent (e.g. from an alert), the full AI path below wins.
+            if has_manual and not has_prompt:
                 if req.downtime_hours <= 0:
                     raise HTTPException(status_code=400, detail="Downtime hours must be greater than zero.")
                 mid = req.machine_id.strip().upper()

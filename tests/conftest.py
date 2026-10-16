@@ -33,3 +33,13 @@ def _offline_gemini(request, monkeypatch):
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
+
+
+@pytest.fixture(autouse=True)
+def _isolated_decision_log(tmp_path, monkeypatch):
+    """Approvals made by tests go to a temporary folder, never into the real decision log."""
+    from app.agent import decision_log
+
+    monkeypatch.setattr(decision_log, "LOG_PATH", tmp_path / "decision_log.json")
+    monkeypatch.setattr(decision_log, "_entries", None)
+    monkeypatch.delenv("FDE_LOG_BUCKET", raising=False)

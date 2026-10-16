@@ -340,3 +340,45 @@ def test_war_room_context_includes_runner_up_plans():
     others = sorted((p for p in decision.feasible_alternatives if p.plan_id != decision.selected_plan.plan_id),
                     key=lambda p: -(p.weighted_score or 0))
     assert [r["plan_id"] for r in runners] == [p.plan_id for p in others[:2]]
+
+
+def test_alert_analysis_uses_the_full_pipeline_not_the_direct_path(client):
+    """An alert sends its report plus machine/downtime; the report must win, so Gemini, robustness
+    and the specialists run (offline here, so the rule-based parser stands in for Gemini)."""
+    body = {"prompt": "M17 will be down for 8 hours. Protect high-priority deliveries.",
+            "machine_id": "M17", "downtime_hours": 8, "incident_id": "ALT-P-M17"}
+    d = client.post("/api/analyze", json=body).json()
+    assert d["scenario_interpretation"] is not None
+    assert d["robustness"] is not None
+    assert d["scenario_summary"].startswith("[ALT-P-M17]")
+    direct = client.post("/api/analyze", json={"machine_id": "M17", "downtime_hours": 8}).json()
+    assert direct["scenario_interpretation"] is None
+
+
+def test_alert_numbers_come_from_the_engine():
+    """The numbers on an alert match the engine's analysis of the same outage."""
+    alerts_mod.reset_alerts()
+    fault = alerts_mod.simulate_fault()  # first scripted fault: M17, 6-10 h repair
+    assert fault["machine_id"] == "M17"
+    assert (fault["affected_orders_count"], fault["high_priority_orders_count"], fault["loss_estimate_units"]) == (6, 3, 211.2)
+    assert "M26" in fault["recommended_action"]
+    alerts_mod.reset_alerts()
+
+    wl = get_watch_list()
+    pred = alerts_mod.predictive_alerts(wl)[0]
+    plan = wl[0]["prebuilt_plan"]
+    assert pred["machine_id"] == "M23"
+    assert pred["affected_orders_count"] == plan["orders_at_risk"]
+    assert pred["high_priority_orders_count"] == plan["high_priority_at_risk"]
+    assert pred["loss_estimate_units"] == plan["capacity_loss_units"]
+    assert pred["hours_to_alarm"] == wl[0]["hours_to_alarm"]
+
+
+def test_repeated_fault_on_same_machine_is_listed_once():
+    alerts_mod.reset_alerts()
+    for _ in range(9):  # more presses than there are scripted faults
+        alerts_mod.simulate_fault()
+    faults = [a for a in alerts_mod.list_alerts([]) if a["kind"] == "fault"]
+    machines = [a["machine_id"] for a in faults]
+    assert len(machines) == len(set(machines))
+    alerts_mod.reset_alerts()

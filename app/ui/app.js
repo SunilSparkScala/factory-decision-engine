@@ -11,56 +11,30 @@ import * as decisionLog from "./js/views/decision-log.js";
 import { startTour, tourDone } from "./js/components/tour.js";
 
 const VIEW_TITLES = {
-  landing: "Cinematic Showcase",
+  landing: "Home",
   decide: "Decision Studio",
   control: "Factory Overview",
-  recovery: "Recovery Plans",
   evidence: "Engineering Evidence",
   log: "Decision Log",
 };
 
-function playHeroVideo() {
-  const vid = $("#hero-video");
-  if (!vid) return;
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  vid.muted = true;
-  vid.playsInline = true;
-  const promise = vid.play();
-  if (promise !== undefined) {
-    promise.catch(() => {
-      const trigger = () => {
-        vid.play().catch(() => {});
-      };
-      window.addEventListener("pointerdown", trigger, { once: true });
-      window.addEventListener("scroll", trigger, { once: true });
-      window.addEventListener("keydown", trigger, { once: true });
-    });
-  }
+/** Landing panel: the demo plant's real size, from the API. */
+async function loadHeroPlant() {
+  try {
+    const o = state.overview || await api.overview();
+    $("#hero-plant-name").textContent = `${o.plant.name}, ${o.plant.location}`;
+    $("#hero-plant-machines").textContent = String(o.kpis.machines_total);
+    $("#hero-plant-orders").textContent = String(o.kpis.orders_active);
+  } catch { /* the panel keeps its placeholders */ }
 }
 
 const VIEWS = {
-  landing: {
-    isLanding: true,
-    onShow: () => {
-      playHeroVideo();
-    },
-  },
+  landing: { isLanding: true, onShow: loadHeroPlant },
   decide: { el: "#view-decide", onShow: workspace.onShow },
   control: { el: "#view-control", onShow: controlRoom.onShow },
-  recovery: { el: "#view-recovery", onShow: showRecoveryView },
   evidence: { el: "#view-evidence", onShow: showEvidenceView },
   log: { el: "#view-log", onShow: decisionLog.onShow },
 };
-
-export function setJourneyStep(stepNum) {
-  for (let i = 1; i <= 5; i++) {
-    const node = $(`#journey-node-${i}`);
-    if (node) {
-      node.classList.toggle("active", i === stepNum);
-      node.classList.toggle("completed", i < stepNum);
-    }
-  }
-}
 
 export function showView(name) {
   if (!VIEWS[name]) name = "control";
@@ -97,17 +71,6 @@ export function showView(name) {
     const bc = $("#bc-view-name");
     if (bc) bc.textContent = VIEW_TITLES[name] || name;
 
-    // Update 5-Step Operational Journey Bar
-    if (name === "control") {
-      setJourneyStep(1);
-    } else if (name === "decide") {
-      if (state.decision) setJourneyStep(4);
-      else setJourneyStep(3);
-    } else if (name === "recovery" || name === "evidence") {
-      setJourneyStep(4);
-    } else if (name === "log") {
-      setJourneyStep(5);
-    }
   }
 
   if (location.hash.split("?")[0] !== `#${name}`) {
@@ -160,25 +123,6 @@ function initNav() {
   for (const tab of $$(".sidebar-tab")) {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   }
-
-  // 5-Step Journey Bar Node Handlers
-  $("#journey-node-1")?.addEventListener("click", () => showView("control"));
-  $("#journey-node-2")?.addEventListener("click", () => {
-    showView("control");
-    controlRoom.openTopIncidentModal?.();
-  });
-  $("#journey-node-3")?.addEventListener("click", () => {
-    showView("decide");
-    workspace.focusInput?.();
-  });
-  $("#journey-node-4")?.addEventListener("click", () => {
-    showView("decide");
-    document.getElementById("step-options")?.scrollIntoView({ behavior: "smooth" });
-  });
-  $("#journey-node-5")?.addEventListener("click", () => {
-    showView("decide");
-    document.getElementById("step-approve")?.scrollIntoView({ behavior: "smooth" });
-  });
 
   // Header return to landing
   $("#brand-home")?.addEventListener("click", () => showView("landing"));
@@ -271,8 +215,11 @@ async function initDomains() {
         setDomain(newKey);
         const pack = state.domains.find((d) => d.key === newKey);
         state.pack = pack;
+        setOperationNames(pack);
+        clear($("#evidence-catalog"));
         await controlRoom.reload();
         workspace.applyPack(pack);
+        if (!$("#view-landing").hidden) loadHeroPlant();
         toast(`Switched synthetic pack to ${pack.plant.name} (${pack.label})`);
       });
     });
@@ -288,33 +235,6 @@ async function initDomains() {
   }
 }
 
-/** Render full Recovery Plans view */
-function showRecoveryView() {
-  const table = $("#view-recovery-table");
-  if (!table) return;
-  const d = state.decision;
-  if (!d) {
-    clear(table, h("tbody", {}, h("tr", {}, h("td", { class: "empty-note", style: "padding:24px; text-align:center;" },
-      "Run an analysis in the Decision Studio to inspect evaluated recovery candidates."))));
-    return;
-  }
-  const machine = d.impact_summary?.machine_id;
-  const sorted = d.candidate_plans.slice().sort((a, b) => (b.is_feasible - a.is_feasible) || ((b.weighted_score ?? -1) - (a.weighted_score ?? -1)));
-  clear(table,
-    h("thead", {}, h("tr", {}, ["Plan ID", "Action Strategy", "Cost Impact", "Delivery Delay", "Quality Penalty", "Operational Risk", "Energy (kWh)", "Weighted Score [0-1]", "Feasibility Status"].map((t) => h("th", {}, t)))),
-    h("tbody", {}, sorted.map((p) => h("tr", { class: `${d.selected_plan?.plan_id === p.plan_id ? "is-selected" : ""}${p.is_feasible ? "" : " infeasible"}` },
-      h("td", { class: "mono font-semibold" }, p.plan_id),
-      h("td", {}, `${p.strategy_type}: ${p.description || p.target_machine_id || ""}`),
-      h("td", { class: "num" }, `$${p.cost_impact_usd?.toFixed(2) || "0.00"}`),
-      h("td", { class: "num" }, p.delivery_delay_score?.toFixed(2) ?? "—"),
-      h("td", { class: "num" }, p.quality_penalty_score?.toFixed(2) ?? "—"),
-      h("td", { class: "num" }, p.risk_score?.toFixed(2) ?? "—"),
-      h("td", { class: "num" }, `${p.energy_kwh ?? "—"}`),
-      h("td", { class: "num font-semibold" }, p.weighted_score?.toFixed(4) ?? "—"),
-      h("td", {}, p.is_feasible ? (d.selected_plan?.plan_id === p.plan_id ? "✓ Recommended" : "Feasible") : (p.infeasibility_reasons || []).join(" "))))),
-  );
-}
-
 /** Render full browsable Engineering Evidence catalog */
 async function showEvidenceView() {
   const catalog = $("#evidence-catalog");
@@ -324,6 +244,7 @@ async function showEvidenceView() {
   try {
     const res = await api.knowledge();
     const docs = res.documents || [];
+    if (!docs.length) { clear(catalog, h("p", { class: "empty-note" }, "No documents found.")); return; }
     clear(catalog, docs.map((doc) => h("article", { class: "catalog-card" },
       h("div", { class: "catalog-card-header" },
         h("span", { class: "badge badge-mono" }, doc.document_id),
@@ -333,18 +254,18 @@ async function showEvidenceView() {
       h("h3", { class: "catalog-title" }, doc.title),
       h("p", { class: "catalog-excerpt" }, doc.excerpt),
       h("details", { class: "catalog-full" },
-        h("summary", {}, "View Full Standard / Document"),
+        h("summary", {}, "Read the full document"),
         h("pre", { class: "catalog-pre" }, doc.content),
       ),
     )));
   } catch {
-    clear(catalog, h("p", { class: "empty-note" }, "Evidence documents loaded dynamically during analysis."));
+    clear(catalog, h("p", { class: "empty-note" }, "Could not load the engineering documents. Try again in a moment."));
   }
 }
 
 async function controlRoomReady(timeout = 15000) {
   const start = Date.now();
-  while (!document.querySelector(".health-group") || !document.querySelector(".alert-item, #alert-list .empty-note")) {
+  while (!document.querySelector("#health-groups .health-group") || !document.querySelector("#alert-list .alert-item, #alert-list .empty-note")) {
     if (Date.now() - start > timeout) return false;
     await new Promise((r) => setTimeout(r, 150));
   }
@@ -364,8 +285,8 @@ async function boot() {
   initTheme();
   initNav();
   $("#btn-tour")?.addEventListener("click", openTour);
-  controlRoom.init({ showView, setPlantClock, setJourneyStep });
-  workspace.init({ showView, setJourneyStep });
+  controlRoom.init({ showView, setPlantClock });
+  workspace.init({ showView });
   decisionLog.init();
   await initDomains();
   await initHealth();
@@ -379,7 +300,7 @@ async function boot() {
   const q = new URLSearchParams(query || "").get("q");
   if (view === "decide" && q) {
     workspace.analyze(q, { fresh: true });
-  } else if (view === "control" && !tourDone()) {
+  } else if (initialView === "control" && !tourDone()) {
     openTour();
   }
 }
