@@ -2,6 +2,8 @@
 Tests for the AI upgrade: scenario understanding, robustness, war-room grounding,
 early-warning prediction, alerts, and the new API endpoints. Gemini is always mocked.
 """
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -165,9 +167,28 @@ def test_simulated_faults_cycle_and_carry_analysis_prompt():
     second = alerts_mod.simulate_fault()
     assert first["machine_id"] == "M17" and second["machine_id"] != "M17"
     assert "6 to 10 hours" in first["analysis_prompt"]
-    listed = alerts_mod.list_alerts([])
-    assert [a["alert_id"] for a in listed][:2] == [second["alert_id"], first["alert_id"]]
+    third = alerts_mod.simulate_fault()
+    fourth = alerts_mod.simulate_fault()
+    # Worst first (HIGH before MEDIUM), newest first within the same severity
+    listed = [a["alert_id"] for a in alerts_mod.list_alerts([])]
+    assert [first["severity"], second["severity"], third["severity"], fourth["severity"]] == ["HIGH", "MEDIUM", "HIGH", "MEDIUM"]
+    assert listed[:4] == [third["alert_id"], first["alert_id"], fourth["alert_id"], second["alert_id"]]
     alerts_mod.reset_alerts()
+
+
+def test_demo_faults_never_break_another_alerts_backup_machine():
+    """The demo must not show a machine as broken while another alert sends work to it."""
+    from app.domains import PACKS, use_domain
+
+    for domain in PACKS:
+        with use_domain(domain):
+            alerts_mod.reset_alerts()
+            faults = [alerts_mod.simulate_fault() for _ in PACKS[domain]["faults"]]
+            faulted = {f["machine_id"] for f in faults}
+            for a in alerts_mod.list_alerts(get_watch_list()):
+                target = re.search(r"alternative machine (M\d+)", a.get("recommended_action") or "")
+                assert not (target and target.group(1) in faulted), f"{domain}: {a['machine_id']}'s backup {target.group(1)} is a demo fault"
+            alerts_mod.reset_alerts()
 
 
 # ---------------------------------------------------------------- agent routing
@@ -382,3 +403,86 @@ def test_repeated_fault_on_same_machine_is_listed_once():
     machines = [a["machine_id"] for a in faults]
     assert len(machines) == len(set(machines))
     alerts_mod.reset_alerts()
+
+
+def test_demo_faults_belong_to_the_viewer_who_raised_them(client):
+    alerts_mod.reset_alerts()
+    a, b = {"X-FDE-Viewer": "judge-a"}, {"X-FDE-Viewer": "judge-b"}
+    fault = client.post("/api/alerts/simulate", headers=a).json()
+    kinds = lambda h: [(x["kind"], x["machine_id"]) for x in client.get("/api/alerts", headers=h).json()["alerts"]]
+    assert ("fault", fault["machine_id"]) in kinds(a)
+    assert all(k == "predictive" for k, _ in kinds(b))  # judge B sees only the shared prediction
+    # judge B's first demo fault is the same first scripted fault, independent of judge A
+    assert client.post("/api/alerts/simulate", headers=b).json()["machine_id"] == fault["machine_id"]
+    alerts_mod.reset_alerts()
+
+
+def test_clear_demo_faults_removes_only_this_viewers_faults(client):
+    alerts_mod.reset_alerts()
+    a, b = {"X-FDE-Viewer": "judge-a"}, {"X-FDE-Viewer": "judge-b"}
+    client.post("/api/alerts/simulate", headers=a)
+    client.post("/api/alerts/simulate", headers=b)
+    assert client.post("/api/alerts/clear", headers=a).json()["removed"] == 1
+    assert not [x for x in client.get("/api/alerts", headers=a).json()["alerts"] if x["kind"] == "fault"]
+    assert [x for x in client.get("/api/alerts", headers=b).json()["alerts"] if x["kind"] == "fault"]
+    alerts_mod.reset_alerts()
+
+
+def test_approving_the_plan_for_a_fault_resolves_it(client):
+    alerts_mod.reset_alerts()
+    h = {"X-FDE-Viewer": "judge-a"}
+    fault = client.post("/api/alerts/simulate", headers=h).json()  # M17, 6-10 h
+    decision = client.post("/api/analyze", headers=h, json={"prompt": fault["analysis_prompt"], "incident_id": fault["alert_id"]}).json()
+    entry = client.post("/api/approve", headers=h, json={"decision": decision, "approver": "Test", "incident_id": fault["alert_id"]}).json()
+    assert entry["resolved_incident"]["alert_id"] == fault["alert_id"]
+    assert not [x for x in client.get("/api/alerts", headers=h).json()["alerts"] if x["kind"] == "fault"]
+    # a prediction is never removed by approving a plan for it
+    pred = next(x for x in client.get("/api/alerts", headers=h).json()["alerts"] if x["kind"] == "predictive")
+    d2 = client.post("/api/analyze", headers=h, json={"prompt": pred["analysis_prompt"], "incident_id": pred["alert_id"]}).json()
+    e2 = client.post("/api/approve", headers=h, json={"decision": d2, "approver": "Test", "incident_id": pred["alert_id"]}).json()
+    assert "resolved_incident" not in e2
+    assert any(x["kind"] == "predictive" for x in client.get("/api/alerts", headers=h).json()["alerts"])
+    alerts_mod.reset_alerts()
+
+
+def test_trend_graph_shows_the_signal_that_drives_the_warning():
+    """M03 is flagged by its falling health score, so its graph must be the health score, not vibration."""
+    by_id = {a["machine_id"]: a for a in get_watch_list()}
+    m03, m23 = by_id["M03"], by_id["M23"]
+    assert m03["driver_signal"] == m03["sparkline_signal"] == "Health score"
+    assert m03["sparkline"][-1] < m03["sparkline"][0] and m03["sparkline_threshold"] < min(m03["sparkline"])
+    assert m23["sparkline_signal"] == "Vibration" and m23["sparkline_threshold"] > max(m23["sparkline"])
+
+
+def test_cause_borrowed_from_an_old_incident_is_flagged():
+    """A specialist may not present a past incident's cause as the cause of today's breakdown."""
+    from app.agent.specialists import find_unsupported_causes
+
+    facts = "Unscheduled downtime on M17 for 8.0 hours. M17 will be down for 8 hours; capacity loss 211.2 units."
+    borrowed = "M17 had 8.0 hours of unscheduled downtime due to a placement head vacuum fault."
+    assert find_unsupported_causes([borrowed], facts) == ["due to a placement head vacuum fault"]
+    # A clearly labelled precedent is allowed
+    precedent = "A past precedent on M17 involved an 8.0-hour downtime due to a placement head vacuum fault."
+    assert find_unsupported_causes([precedent], facts) == []
+    # Generic wording about the known situation passes
+    assert find_unsupported_causes(["Orders slip because of the capacity loss on M17."], facts) == []
+    # A cause the manager actually reported may be repeated
+    assert find_unsupported_causes([borrowed], facts + " Reported: placement head vacuum fault on M17.") == []
+
+
+def test_specialists_see_the_reported_problem():
+    from app.agent.specialists import build_decision_context
+
+    decision = DecisionOrchestrator().orchestrate(machine_id="M17", downtime_hours=8.0, priorities="delivery cost")
+    assert "cause is not stated" in build_decision_context(decision)["reported_problem"]
+    decision.scenario_interpretation = {"summary": "M17 placement head lost vacuum; down about 8 hours."}
+    assert build_decision_context(decision)["reported_problem"].startswith("M17 placement head lost vacuum")
+
+
+def test_grounding_reads_numbers_next_to_dashes_in_documents():
+    """A document says "15–20%"; an agent quoting "15 to 20 percent" is grounded."""
+    import json
+
+    evidence = {"maintenance": [{"id": "KB-MNT-002", "excerpt": "Speed Derating: Reduce cycle rate by 15–20%."}]}
+    text = "Derate speed by 15 to 20 percent."
+    assert find_ungrounded_numbers([text], json.dumps(evidence, ensure_ascii=False)) == []

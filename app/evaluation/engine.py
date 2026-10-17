@@ -172,13 +172,13 @@ def _calculate_raw_metrics(
             overtime_hours += action.details.get("required_overtime_hours", 0.0)
         overtime_cost = overtime_hours * config.OVERTIME_COST_PER_HOUR
         cost_usd = overtime_cost + (remaining_gap * config.UNRECOVERED_GAP_COST_PER_UNIT)
-        assumptions.append(f"Overtime cost calculated at synthetic rate of ${config.OVERTIME_COST_PER_HOUR}/hr.")
+        assumptions.append(f"Overtime cost calculated at an assumed rate of ${config.OVERTIME_COST_PER_HOUR}/hr.")
     elif plan.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER:
         cost_usd = config.TRANSFER_BASE_COST + (remaining_gap * config.UNRECOVERED_GAP_COST_PER_UNIT)
-        assumptions.append(f"Machine transfer includes synthetic base transfer setup cost of ${config.TRANSFER_BASE_COST}.")
+        assumptions.append(f"Machine transfer includes an assumed transfer setup cost of ${config.TRANSFER_BASE_COST}.")
     else: # RESEQUENCE
         cost_usd = config.RESEQUENCE_BASE_COST + (remaining_gap * config.UNRECOVERED_GAP_COST_PER_UNIT)
-        assumptions.append(f"Resequencing includes synthetic administrative setup cost of ${config.RESEQUENCE_BASE_COST}.")
+        assumptions.append(f"Resequencing includes an assumed administrative setup cost of ${config.RESEQUENCE_BASE_COST}.")
 
     cost_usd = round(cost_usd, 2)
 
@@ -193,7 +193,7 @@ def _calculate_raw_metrics(
 
     # 4. Energy Consumption kWh
     energy_kwh = round(recovered_units * config.ENERGY_KWH_PER_UNIT, 1)
-    assumptions.append(f"Energy consumption estimated using synthetic rate of {config.ENERGY_KWH_PER_UNIT} kWh/unit.")
+    assumptions.append(f"Energy consumption estimated using an assumed rate of {config.ENERGY_KWH_PER_UNIT} kWh/unit.")
 
     # 5. Risk Impact Score (0.0 best, 1.0 worst)
     if plan.strategy_type == RecoveryStrategyType.MACHINE_TRANSFER:

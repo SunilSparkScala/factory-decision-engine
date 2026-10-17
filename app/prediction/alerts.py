@@ -4,19 +4,41 @@ Alert inbox: machine fault events and predictive early warnings.
 Fault events are scripted (the prototype has no live PLC/MES feed); in production they would
 arrive from the plant's event stream (e.g. Pub/Sub). Each alert carries a ready-made analysis
 prompt, so opening it runs the full decision pipeline with no typing.
+
+Demo faults belong to the viewer who raised them (browser id from the `X-FDE-Viewer` header),
+so judges testing the live app at the same time never see each other's simulated faults.
 """
+import re
 import threading
+from collections import OrderedDict
+from contextvars import ContextVar
 from datetime import timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.config import config
 from app.domains import current_domain, get_pack
 
+_viewer: ContextVar[str] = ContextVar("fde_viewer", default="shared")
+MAX_VIEWERS = 1000  # oldest viewers' demo faults are dropped beyond this
 
-# Fired alerts and the next scripted fault, kept separately for each industry pack
+# Fired alerts and the next scripted fault, per (industry pack, viewer)
 _lock = threading.Lock()
-_fired: Dict[str, List[Dict[str, Any]]] = {}
-_next_index: Dict[str, int] = {}
+_fired: "OrderedDict[Tuple[str, str], List[Dict[str, Any]]]" = OrderedDict()
+_next_index: Dict[Tuple[str, str], int] = {}
+
+
+def set_viewer(viewer_id: Optional[str]):
+    """Set the viewer for this request; anything that isn't a short plain id counts as 'shared'."""
+    v = (viewer_id or "").strip()
+    return _viewer.set(v if re.fullmatch(r"[A-Za-z0-9-]{1,64}", v) else "shared")
+
+
+def reset_viewer(token) -> None:
+    _viewer.reset(token)
+
+
+def _key() -> Tuple[str, str]:
+    return current_domain(), _viewer.get()
 
 
 def _engine_estimate(machine_id: str, repair_hours) -> Dict[str, Any]:
@@ -75,16 +97,41 @@ def _fault_alert(fault: Dict[str, Any], seq: int) -> Dict[str, Any]:
 
 def simulate_fault() -> Dict[str, Any]:
     """Raise the next scripted fault of the active industry pack (demo trigger for a machine event)."""
-    domain = current_domain()
+    key = _key()
     faults = get_pack()["faults"]
     with _lock:
-        seq = _next_index.get(domain, 0)
-        _next_index[domain] = seq + 1
+        seq = _next_index.get(key, 0)
+        _next_index[key] = seq + 1
         alert = _fault_alert(faults[seq % len(faults)], seq + 1)
         # A machine that is already reported down appears once: the newest report replaces the old one
-        fired = [x for x in _fired.get(domain, []) if x["machine_id"] != alert["machine_id"]]
-        _fired[domain] = [alert] + fired
+        fired = [x for x in _fired.get(key, []) if x["machine_id"] != alert["machine_id"]]
+        _fired[key] = [alert] + fired
+        _fired.move_to_end(key)
+        while len(_fired) > MAX_VIEWERS:
+            old, _ = _fired.popitem(last=False)
+            _next_index.pop(old, None)
         return alert
+
+
+def clear_faults() -> int:
+    """Remove this viewer's demo faults (the next simulated fault starts from the first again)."""
+    key = _key()
+    with _lock:
+        removed = len(_fired.pop(key, []))
+        _next_index.pop(key, None)
+        return removed
+
+
+def resolve_fault(alert_id: str, machine_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """A fault whose recovery plan was approved leaves the inbox. Predictions stay (they come
+    from the sensor trend). Returns the resolved alert, or None if nothing matched."""
+    key = _key()
+    with _lock:
+        fired = _fired.get(key, [])
+        match = next((a for a in fired if a["alert_id"] == alert_id and a["machine_id"] == machine_id), None)
+        if match:
+            _fired[key] = [a for a in fired if a is not match]
+        return match
 
 
 def reset_alerts() -> None:
@@ -130,9 +177,14 @@ def predictive_alerts(watch_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return alerts
 
 
+_SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
+
 def list_alerts(watch_list: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     with _lock:
-        fired = list(_fired.get(current_domain(), []))
+        fired = list(_fired.get(_key(), []))
+    # Python's sort is stable, so faults of equal severity keep their newest-first order
+    fired.sort(key=lambda a: _SEVERITY_ORDER.get(a["severity"], len(_SEVERITY_ORDER)))
     combined = fired + predictive_alerts(watch_list or [])
     # Assign explicit 1-indexed priority ranking based on order of operational urgency
     for idx, alert in enumerate(combined):

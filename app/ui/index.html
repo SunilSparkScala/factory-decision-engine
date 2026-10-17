@@ -23,168 +23,14 @@
   <a class="skip-link" href="#main">Skip to content</a>
 
   <!-- =========================================================================
-       EXPERIENCE A: CINEMATIC INDUSTRIAL HERO LANDING PAGE (SPLIT NON-OVERLAPPING)
-       ========================================================================= -->
-  <section class="view view-landing" id="view-landing" aria-label="Product Landing">
-    <!-- Ambient Subtle Background Grid -->
-    <div class="hero-bg-backdrop" aria-hidden="true">
-      <div class="hero-grid-lines"></div>
-    </div>
-
-    <!-- Landing Navigation -->
-    <header class="landing-header">
-      <div class="landing-brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2.5L20.5 7.4v9.2L12 21.5 3.5 16.6V7.4L12 2.5z"/>
-            <path d="M12 12V2.5"/>
-            <path d="M12 12L3.5 7.4"/>
-            <path d="M12 12L20.5 7.4"/>
-            <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/>
-            <circle cx="12" cy="6.2" r="1.3" fill="currentColor" stroke="none"/>
-            <circle cx="7" cy="14.8" r="1.3" fill="currentColor" stroke="none"/>
-            <circle cx="17" cy="14.8" r="1.3" fill="currentColor" stroke="none"/>
-          </svg>
-        </div>
-        <div class="landing-brand-text">
-          <span class="brand-name">FACTORY DECISION ENGINE</span>
-          <span class="brand-sub">INDUSTRIAL DECISION INTELLIGENCE</span>
-        </div>
-      </div>
-
-      <nav class="landing-nav" aria-label="Landing Navigation">
-        <button type="button" class="landing-nav-link" id="btn-how-it-works">How It Works</button>
-        <button type="button" class="landing-nav-link" id="btn-architecture">Engine Architecture</button>
-        <label class="domain-select domain-select-landing" title="Switch synthetic plant pack">
-          <span class="domain-label">Industry:</span>
-          <select id="domain-select-landing" aria-label="Industry"></select>
-        </label>
-        <span class="ai-pill" id="ai-status-landing" role="status" title="AI Status">
-          <span class="dot"></span><span class="ai-status-text">Checking AI…</span>
-        </span>
-        <button type="button" class="btn btn-primary btn-landing-cta" id="btn-hero-enter">
-          Enter Decision Studio <span class="arrow" aria-hidden="true">→</span>
-        </button>
-      </nav>
-    </header>
-
-    <!-- Split Hero: Live Video on Left, Narrative & Decisions on Right -->
-    <div class="landing-hero-split-container">
-      <div class="landing-hero-grid">
-        <!-- LEFT COLUMN: how one decision is made, with the demo plant's real numbers -->
-        <div class="hero-video-pane">
-          <div class="monitor-frame hero-flow-frame">
-            <div class="monitor-header">
-              <div class="monitor-badge-live"><span>WHEN A MACHINE STOPS</span></div>
-              <div class="monitor-meta"><span class="meta-tag" id="hero-plant-tag">Synthetic demo plant</span></div>
-            </div>
-            <ol class="hero-flow" aria-label="How a decision is made">
-              <li><span class="hf-num">1</span><div><strong>You report it, or the machine does</strong><span>In plain words, e.g. “M17 is down for about 8 hours”. Gemini works out the machine, the duration and your priorities.</span></div></li>
-              <li><span class="hf-num">2</span><div><strong>The engine traces the impact</strong><span>Machine → station → line → the customer orders that will be late.</span></div></li>
-              <li><span class="hf-num">3</span><div><strong>Every recovery option is checked and ranked</strong><span>Move the work, reorder the queue or add overtime, scored on delivery, cost, quality, energy and risk.</span></div></li>
-              <li><span class="hf-num">4</span><div><strong>Four AI specialists review the plan</strong><span>Production, Quality, Maintenance and Energy, citing the plant's engineering documents.</span></div></li>
-              <li><span class="hf-num">5</span><div><strong>You approve</strong><span>Nothing changes on the floor until a person signs off. Work orders are drafted for you.</span></div></li>
-            </ol>
-            <div class="monitor-footer">
-              <div class="feed-stat"><span class="stat-lbl">PLANT:</span><strong class="stat-val" id="hero-plant-name">—</strong></div>
-              <div class="feed-stat"><span class="stat-lbl">MACHINES:</span><strong class="stat-val" id="hero-plant-machines">—</strong></div>
-              <div class="feed-stat"><span class="stat-lbl">ACTIVE ORDERS:</span><strong class="stat-val" id="hero-plant-orders">—</strong></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- RIGHT COLUMN: Decision Intelligence Engine Narrative & CTAs -->
-        <div class="hero-content-pane">
-          <div class="hero-badge-eyebrow">
-            <span class="eyebrow-dot"></span>
-            <span class="eyebrow-text">INDUSTRIAL DECISION INTELLIGENCE</span>
-          </div>
-
-          <h1 class="hero-headline">
-            When a machine stops, production decisions can’t wait.
-          </h1>
-
-          <p class="hero-motto">
-            Before you change the factory, understand what happens next.
-          </p>
-
-          <p class="hero-statement">
-            Understand downstream production impact, compare feasible recovery plans, and approve the next move—with engineering evidence.
-          </p>
-
-          <div class="hero-cta-group">
-            <button type="button" class="btn btn-primary btn-xl" id="btn-enter-workspace">
-              <span>Enter Decision Studio</span>
-              <span class="btn-icon" aria-hidden="true">→</span>
-            </button>
-            <button type="button" class="btn btn-outline btn-xl" id="btn-explore-modal">
-              <span>Explore how it works</span>
-              <span class="btn-icon" aria-hidden="true">ⓘ</span>
-            </button>
-            <button type="button" class="btn btn-ghost btn-xl chip-quick-canonical" id="btn-launch-m17" title="Run the example: M17 down for 8 hours">
-              <span class="pulse-dot"></span>
-              <span>Try it: M17 down for 8 hours</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- Live Engineering Telemetry Accent Strip Across Bottom -->
-      <div class="hero-telemetry-strip" aria-label="Engine Capabilities">
-        <div class="telemetry-item">
-          <span class="telemetry-idx">01</span>
-          <div class="telemetry-body">
-            <div class="telemetry-title-row">
-              <strong>Dependency Tracing</strong>
-              <span class="mini-status-pill"><span class="msp-dot"></span>Topology</span>
-            </div>
-            <span class="telemetry-sub">Machine → Station → Line → Orders</span>
-          </div>
-        </div>
-        <div class="telemetry-item">
-          <span class="telemetry-idx">02</span>
-          <div class="telemetry-body">
-            <div class="telemetry-title-row">
-              <strong>Deterministic Engine</strong>
-              <span class="mini-status-pill"><span class="msp-dot"></span>No AI numbers</span>
-            </div>
-            <span class="telemetry-sub">Simulation &amp; weighted scoring</span>
-          </div>
-        </div>
-        <div class="telemetry-item">
-          <span class="telemetry-idx">03</span>
-          <div class="telemetry-body">
-            <div class="telemetry-title-row">
-              <strong>Specialist War Room</strong>
-              <span class="mini-status-pill"><span class="msp-dot"></span>4 Agents</span>
-            </div>
-            <span class="telemetry-sub">Production, Quality, Maintenance &amp; Energy</span>
-          </div>
-        </div>
-        <div class="telemetry-item">
-          <span class="telemetry-idx">04</span>
-          <div class="telemetry-body">
-            <div class="telemetry-title-row">
-              <strong>Human Dispatch Boundary</strong>
-              <span class="mini-status-pill"><span class="msp-dot"></span>Grounded</span>
-            </div>
-            <span class="telemetry-sub">Mandatory human review &amp; audit logging</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- =========================================================================
-       EXPERIENCE B: DECISION STUDIO FIXED WORKSPACE APPLICATION SHELL
+       APPLICATION SHELL: header, left navigation and the four views
        ========================================================================= -->
   <div class="app-shell" id="app-shell">
 
     <!-- Compact Desktop Header (56px) -->
     <header class="app-header">
       <div class="header-inner">
-        <div class="brand brand-clickable" id="brand-home" title="Return to Cinematic Landing">
+        <div class="brand brand-clickable" id="brand-home" title="Factory Overview">
           <div class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 2.5L20.5 7.4v9.2L12 21.5 3.5 16.6V7.4L12 2.5z"/>
@@ -214,11 +60,10 @@
             <span class="domain-label">Industry</span>
             <select id="domain-select" aria-label="Industry"></select>
           </label>
-          <span class="chip chip-clock" id="plant-clock" title="Simulated plant time">🕗 --</span>
+          <span class="chip chip-clock" id="plant-clock" title="The demo plant's own clock. Deadlines and alerts in this demo are based on it.">🕗 Plant time · --</span>
           <span class="ai-pill" id="ai-status" role="status" title="AI status">
             <span class="dot"></span><span id="ai-status-text">Checking AI…</span>
           </span>
-          <button class="nav-return-landing" id="btn-back-landing" title="Return to Cinematic Landing Page">⌂ Landing</button>
           <button class="icon-btn" id="btn-tour" aria-label="Take the guided tour" title="Guided tour">?</button>
           <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle light / dark">
             <span class="theme-icon-light" aria-hidden="true">☀</span>
@@ -233,23 +78,30 @@
       <!-- Fixed Left Navigation Rail (~200px) -->
       <aside class="app-sidebar" aria-label="Application Navigation">
         <nav class="sidebar-nav">
-          <button class="sidebar-tab active" data-view="control" id="nav-tab-control" aria-current="page">
+          <button class="sidebar-tab active" data-view="control" id="nav-tab-control" aria-current="page"
+                  title="The whole plant at a glance: what needs action now, machine health and delivery deadlines">
             <span class="tab-icon" aria-hidden="true">◉</span>
             <span class="tab-label">Factory Overview</span>
+            <span class="tab-short" aria-hidden="true">Overview</span>
             <span class="nav-badge" id="nav-alert-count" hidden>0</span>
           </button>
-          <button class="sidebar-tab" data-view="decide" id="nav-tab-decide">
+          <button class="sidebar-tab" data-view="decide" id="nav-tab-decide"
+                  title="Analyse a disruption: what it affects, the ways to recover and a recommendation for you to approve">
             <span class="tab-icon" aria-hidden="true">⚡</span>
             <span class="tab-label">Decision Studio</span>
-            <span class="tab-pill" id="pill-active-decision" hidden>Active</span>
+            <span class="tab-short" aria-hidden="true">Decide</span>
           </button>
-          <button class="sidebar-tab" data-view="evidence" id="nav-tab-evidence">
+          <button class="sidebar-tab" data-view="evidence" id="nav-tab-evidence"
+                  title="The plant's manuals, procedures and past incident reports that the AI quotes">
             <span class="tab-icon" aria-hidden="true">📖</span>
             <span class="tab-label">Engineering Evidence</span>
+            <span class="tab-short" aria-hidden="true">Evidence</span>
           </button>
-          <button class="sidebar-tab" data-view="log" id="nav-tab-log">
+          <button class="sidebar-tab" data-view="log" id="nav-tab-log"
+                  title="Every approved decision: who approved it, when, and the work orders drafted">
             <span class="tab-icon" aria-hidden="true">✓</span>
             <span class="tab-label">Decision Log</span>
+            <span class="tab-short" aria-hidden="true">Log</span>
           </button>
         </nav>
       </aside>
@@ -271,14 +123,10 @@
                 <div class="card-header-compact">
                   <div class="step-badge-title">
                     <span class="step-num-badge">1</span>
-                    <h2 id="composer-heading" class="section-title">Describe Disruption Scenario</h2>
+                    <h2 id="composer-heading" class="section-title">Report a disruption</h2>
                   </div>
                   <div class="composer-actions">
-                    <button type="button" class="btn btn-ghost btn-xs btn-return-overview" id="btn-return-overview" title="Return to Factory Overview">
-                      ← Factory Overview (Monitor)
-                    </button>
                     <span class="kbd-shortcut-hint" title="Press Ctrl+Enter or Cmd+Enter to run analysis">Ctrl+Enter to run</span>
-                    <button type="button" class="link-btn" id="btn-reset-demo" title="Restore canonical M17 8h scenario">↺ Reset Demo</button>
                   </div>
                 </div>
 
@@ -317,14 +165,12 @@
 
                 <!-- Loading Progress Indicator -->
                 <div id="progress" class="progress" hidden aria-live="polite">
-                  <div class="progress-step" data-stage="0"><span class="ps-dot"></span>1 · Gemini interprets operational disruption</div>
+                  <span class="progress-title" id="progress-title">Working on it</span>
+                  <div class="progress-step" data-stage="0"><span class="ps-dot"></span><span class="ps-text">Gemini reads the report</span></div>
                   <span class="progress-arrow" aria-hidden="true">→</span>
-                  <div class="progress-step" data-stage="1"><span class="ps-dot"></span>2 · Deterministic engine simulates ripple &amp; optimizes options</div>
+                  <div class="progress-step" data-stage="1"><span class="ps-dot"></span><span class="ps-text">Engine calculates the options</span></div>
                   <span class="progress-arrow" aria-hidden="true">→</span>
-                  <div class="progress-step progress-parallel" data-stage="2">
-                    <span class="ps-dot"></span>
-                    <span>3 · Specialist War Room <small>Production · Quality · Maintenance · Energy</small></span>
-                  </div>
+                  <div class="progress-step" data-stage="2" title="Production, quality, maintenance and energy specialists, then a lead who sums up"><span class="ps-dot"></span><span class="ps-text">4 AI specialists review</span></div>
                 </div>
 
                 <!-- Scenario Interpretation Banner -->
@@ -344,8 +190,8 @@
                   </svg>
                 </div>
                 <h3>Ready to evaluate factory disruptions</h3>
-                <p>Describe what happened above, pick an example, or load the M17 example to see the impact, the recovery options and the recommendation.</p>
-                <button type="button" class="btn btn-secondary btn-sm" id="btn-empty-canonical">Load Canonical M17 Scenario</button>
+                <p>Describe what happened above or pick an example to see the impact, the recovery options and the recommendation.</p>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-empty-canonical">Try the M17 example</button>
               </div>
 
               <!-- STEP 2: Impact Strip & Compact Visual Dependency Trace -->
@@ -353,7 +199,7 @@
                 <div class="card-header-compact">
                   <div class="step-badge-title">
                     <span class="step-num-badge">2</span>
-                    <h2 id="impact-heading" class="section-title">Operational Impact &amp; Dependency Propagation</h2>
+                    <h2 id="impact-heading" class="section-title">What this affects</h2>
                   </div>
                   <span class="step-hint" id="impact-scenario"></span>
                 </div>
@@ -361,8 +207,7 @@
                 <!-- Compact Visual Dependency Trace -->
                 <div class="dependency-trace-wrap">
                   <div class="trace-header">
-                    <span class="trace-label">Factory Dependency Path</span>
-                    <span class="trace-sub">Grounded machine topology &amp; routing</span>
+                    <span class="trace-label">How the breakdown spreads</span>
                   </div>
                   <div class="ripple" id="ripple-chain" aria-label="Factory dependency propagation"></div>
                 </div>
@@ -372,7 +217,7 @@
 
                 <!-- Affected Orders Drawer / Disclosure -->
                 <details class="disclosure" id="orders-disclosure">
-                  <summary>Inspect Affected Customer Orders (<span id="orders-count-label">6 orders</span>)</summary>
+                  <summary>Show the affected customer orders (<span id="orders-count-label">6 orders</span>)</summary>
                   <div class="table-wrap"><table class="data-table" id="orders-table"></table></div>
                 </details>
               </section>
@@ -405,13 +250,13 @@
                 <div class="subview-tabs-header">
                   <div class="tab-pills" role="tablist">
                     <button type="button" class="subtab-btn active" data-subtab="map" role="tab" aria-selected="true">
-                      Plant Floor Routing
+                      Where the work can go
                     </button>
                     <button type="button" class="subtab-btn" data-subtab="candidates" role="tab" aria-selected="false">
-                      Candidate Matrix (<span id="all-candidates-count">10</span>)
+                      All options (<span id="all-candidates-count">10</span>)
                     </button>
                     <button type="button" class="subtab-btn" data-subtab="robustness" role="tab" aria-selected="false">
-                      Downtime Robustness (1–48h)
+                      If the repair takes longer
                     </button>
                   </div>
                 </div>
@@ -429,6 +274,10 @@
 
                 <!-- Tab 2: Candidate Matrix -->
                 <div class="subtab-panel" id="panel-candidates" role="tabpanel" hidden>
+                  <div class="subcard-head">
+                    <h4>Every option the engine considered</h4>
+                    <span class="subcard-hint">Each option's cost, delivery, quality, risk and energy. The highest overall score wins under your priorities; options that break a rule say why.</span>
+                  </div>
                   <div class="table-wrap">
                     <table class="data-table" id="candidates-table"></table>
                   </div>
@@ -438,8 +287,8 @@
                 <div class="subtab-panel" id="panel-robustness" role="tabpanel" hidden>
                   <div class="subcard" id="robustness-card">
                     <div class="subcard-head">
-                      <h4>Downtime Sensitivity Horizon</h4>
-                      <span class="subcard-hint">Deterministic re-evaluation across 1–48 hours of outage duration.</span>
+                      <h4>Does the plan still hold if the repair takes longer?</h4>
+                      <span class="subcard-hint">The engine re-runs every option for downtimes from 1 to 48 hours. Each colour is the best plan for that downtime; if “This plan” covers a wide range around the estimate, the choice is safe.</span>
                     </div>
                     <div id="robustness"></div>
                   </div>
@@ -450,6 +299,13 @@
 
             <!-- COLUMN 2: Decision & Recommendation Rail (~38% width) -->
             <div class="studio-rail">
+
+              <!-- Shown until the first recommendation arrives -->
+              <div class="rail-placeholder" id="rail-placeholder">
+                <span class="step-num-badge badge-primary-step">3</span>
+                <h3>Recommendation appears here</h3>
+                <p>The best recovery plan with its cost and delivery effect, reviewed by 4 AI specialists (production, quality, maintenance, energy). Nothing changes in the plant until you approve it.</p>
+              </div>
 
               <!-- STEP 3: The Recommendation Hero Card (Focal Point of the Product) -->
               <section class="studio-card card-recommendation" id="step-recommendation" hidden aria-labelledby="rec-heading">
@@ -462,7 +318,6 @@
                     <button type="button" class="btn-header-approve" id="btn-quick-approve" title="Review &amp; approve this recommendation">
                       Approve Plan ✓
                     </button>
-                    <span class="badge badge-primary-glow" id="rec-status-tag">Recommended</span>
                   </div>
                 </div>
 
@@ -473,11 +328,13 @@
                 <div class="rec-hero-card">
                   <div class="rec-hero-header">
                     <div class="rec-badge-row">
-                      <span class="badge badge-mono" id="rec-plan-id">PLAN_--</span>
+                      <span class="badge badge-mono" id="rec-plan-id" hidden>PLAN_--</span>
                       <span class="badge badge-strategy" id="rec-strategy">--</span>
                       <span class="badge badge-route" id="rec-route" hidden></span>
                       <span class="badge badge-grounding" id="rec-grounding" hidden></span>
                     </div>
+                    <div class="rec-basis" id="rec-basis" aria-live="polite"></div>
+                    <div class="lead-tag" id="rec-lead-tag" hidden title="A fifth Gemini agent reads the four specialist reviews and writes this summary; it cannot change the engine's recommendation.">✦ Summary by the Decision Lead (Gemini), combining the 4 specialist reviews</div>
                     <h3 class="rec-title" id="rec-title">Waiting for analysis...</h3>
                     <p class="rec-summary" id="rec-summary"></p>
                   </div>
@@ -499,15 +356,15 @@
                       <h4 class="mini-head">Why this plan wins</h4>
                       <ul class="check-list" id="rec-why"></ul>
                     </div>
-                    <div class="rec-col">
-                      <h4 class="mini-head">Specialist watch-outs</h4>
+                    <div class="rec-col" id="rec-watch-col">
+                      <h4 class="mini-head">Watch-outs</h4>
                       <ul class="warn-list" id="rec-watch"></ul>
                     </div>
                   </div>
 
                   <!-- Next Steps Checklist -->
                   <div class="rec-next-steps">
-                    <h4 class="mini-head">Execution next steps</h4>
+                    <h4 class="mini-head">After you approve</h4>
                     <ol class="steps-list" id="rec-next"></ol>
                   </div>
                 </div>
@@ -570,26 +427,26 @@
                 </div>
 
                 <!-- STEP 5: Engineering Evidence Citations -->
-                <details class="disclosure" id="evidence-disclosure" open>
+                <details class="disclosure" id="evidence-disclosure">
                   <summary id="evidence-summary">Engineering Evidence &amp; Citations</summary>
                   <div class="evidence-grid" id="evidence"></div>
                 </details>
 
                 <!-- Technical Optimization Details -->
                 <details class="disclosure" id="details-disclosure">
-                  <summary>Mathematical &amp; Constraint Details</summary>
+                  <summary>Calculation details</summary>
                   <div class="details-grid">
                     <div>
-                      <h4 class="mini-head">Numerical Authority</h4>
+                      <h4 class="mini-head">Who calculated what</h4>
                       <div id="agent-trace" class="trace"></div>
-                      <h4 class="mini-head">Optimizer Priority Weights</h4>
+                      <h4 class="mini-head">Priority weights</h4>
                       <div id="weights" class="weights"></div>
                       <p class="fine-print" title="Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty.">
                         Delivery impact scale: 0.00 (optimal, zero delay) to 1.00 (maximum penalty).
                       </p>
                     </div>
                     <div>
-                      <h4 class="mini-head">Engine Rationale</h4>
+                      <h4 class="mini-head">Engine reasoning</h4>
                       <div id="rationale" class="prose"></div>
                       <h4 class="mini-head">Assumptions</h4>
                       <ul id="assumptions" class="plain-list"></ul>
@@ -611,11 +468,11 @@
              ================================================================= -->
         <section class="view view-control" id="view-control" aria-labelledby="control-title" hidden>
           
-          <!-- Compact Operations Cockpit Header Bar -->
+          <!-- Page title bar -->
           <div class="cockpit-header-bar">
             <div class="chb-left">
               <div class="chb-title-group">
-                <h1 id="control-title" class="cockpit-title">Factory Operations Cockpit</h1>
+                <h1 id="control-title" class="cockpit-title">Factory Overview</h1>
                 <span class="chb-plant-name" id="plant-name">Loading plant…</span>
               </div>
               <div class="chb-tags">
@@ -626,7 +483,6 @@
               </div>
             </div>
             <div class="chb-right">
-              <button type="button" class="btn btn-demo btn-xs" id="btn-simulate-fault" title="In production, faults arrive automatically from the machines (PLC/MES). This plays the machine and sends one.">🧪 Demo: simulate a machine fault</button>
               <button type="button" class="btn btn-ghost btn-xs" id="btn-about-data" aria-haspopup="dialog">ⓘ Data Notice</button>
             </div>
           </div>
@@ -634,67 +490,26 @@
           <!-- Report a disruption: the main action, available the moment the cockpit opens -->
           <form class="quick-report cockpit-quick-report" id="quick-report" autocomplete="off">
             <label for="quick-report-input" class="quick-report-label"><span aria-hidden="true">⚡</span> Report a disruption</label>
-            <input id="quick-report-input" type="text" placeholder="What happened? e.g. “M17 is down for about 6 hours, protect high-priority orders”">
+            <input id="quick-report-input" type="text" placeholder="What happened? e.g. “pick-and-place on Line B stopped, maybe 6 hours, protect urgent orders”">
             <button type="submit" class="btn btn-primary btn-sm">Analyze →</button>
           </form>
 
-          <!-- Executive KPI Ribbon: High-signal factory performance overview -->
-          <div class="cockpit-kpi-strip" id="cockpit-kpi-strip" aria-label="Executive Operations Overview">
-            <div class="cockpit-kpi-card" id="kpi-card-availability">
-              <div class="kpi-card-header">
-                <span class="kpi-icon" aria-hidden="true">⚙</span>
-                <span class="kpi-label">Fleet Availability</span>
-                <span class="kpi-pill kpi-pill-ok" id="kpi-avail-rate">--%</span>
+          <!-- Needs action now: faults and urgent predictions -->
+          <section class="cockpit-section" id="sec-alerts" aria-labelledby="alerts-title">
+            <div class="cockpit-section-head">
+              <div class="csh-left">
+                <h2 id="alerts-title">Needs action now</h2>
+                <span class="csh-sub">Machine faults and urgent predictions. Open one to get a recovery plan.</span>
               </div>
-              <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-avail-val">-- / --</span>
-                <span class="kpi-unit">assets active</span>
+              <div class="demo-controls">
+                <button type="button" class="link-btn" id="btn-clear-faults" title="Remove the demo faults you created" hidden>Clear demo faults</button>
+                <button type="button" class="btn btn-demo btn-xs" id="btn-simulate-fault" title="In production, faults arrive automatically from the machines (PLC/MES). This plays the machine and sends one.">🧪 Demo: simulate a machine fault</button>
               </div>
-              <div class="kpi-sub" id="kpi-avail-breakdown">Loading fleet status…</div>
             </div>
-
-            <div class="cockpit-kpi-card" id="kpi-card-throughput">
-              <div class="kpi-card-header">
-                <span class="kpi-icon" aria-hidden="true">📈</span>
-                <span class="kpi-label">Plant Utilization</span>
-                <span class="kpi-pill kpi-pill-neutral" id="kpi-util-pill">24h Schedule</span>
-              </div>
-              <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-util-val">--%</span>
-                <span class="kpi-unit">overall capacity</span>
-              </div>
-              <div class="kpi-meter-wrap">
-                <div class="kpi-meter-bar" id="kpi-util-bar" style="width: 0%"></div>
-              </div>
-              <div class="kpi-sub" id="kpi-util-sub">Loading scheduled units…</div>
+            <div class="incident-queue-table" id="alert-list" aria-live="polite">
+              <div class="skeleton-block" style="height:120px;"></div>
             </div>
-
-            <div class="cockpit-kpi-card" id="kpi-card-delivery">
-              <div class="kpi-card-header">
-                <span class="kpi-icon" aria-hidden="true">📦</span>
-                <span class="kpi-label">Delivery Commitments</span>
-                <span class="kpi-pill kpi-pill-warn" id="kpi-delivery-badge">-- Due 24h</span>
-              </div>
-              <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-delivery-val">--</span>
-                <span class="kpi-unit">active orders</span>
-              </div>
-              <div class="kpi-sub" id="kpi-delivery-sub">Loading delivery pressure…</div>
-            </div>
-
-            <div class="cockpit-kpi-card" id="kpi-card-incidents">
-              <div class="kpi-card-header">
-                <span class="kpi-icon" aria-hidden="true">⚡</span>
-                <span class="kpi-label">Disruption Radar</span>
-                <span class="kpi-pill kpi-pill-urgent" id="kpi-incidents-badge">Active</span>
-              </div>
-              <div class="kpi-value-row">
-                <span class="kpi-value" id="kpi-incidents-val">--</span>
-                <span class="kpi-unit">warnings</span>
-              </div>
-              <div class="kpi-sub" id="kpi-incidents-sub">Loading disruption radar…</div>
-            </div>
-          </div>
+          </section>
 
           <div class="cockpit-deck cockpit-deck-2">
             <!-- Machine health: three groups that add up to the total -->
@@ -727,7 +542,7 @@
               <div class="exposure-metrics-grid">
                 <div class="em-item">
                   <span class="em-val danger" id="cnt-high-pri-due">--</span>
-                  <span class="em-lbl">High-priority due in 24 h</span>
+                  <span class="em-lbl">High-priority due in 24&nbsp;h</span>
                 </div>
                 <div class="em-item">
                   <span class="em-val warn" id="cnt-high-pri-total">--</span>
@@ -740,33 +555,6 @@
               </div>
             </div>
           </div>
-
-          <!-- Production Lines Utilization & Bottlenecks Panel -->
-          <div class="cockpit-lines-panel" id="cockpit-lines-panel">
-            <div class="lines-panel-head">
-              <div class="lph-title">
-                <span class="lph-icon" aria-hidden="true">🏭</span>
-                <h3>Production Line Utilization &amp; Bottlenecks</h3>
-              </div>
-              <span class="lph-sub mono" id="lph-summary-badge">3 Lines Active</span>
-            </div>
-            <div class="lines-grid" id="cockpit-lines-grid">
-              <!-- Dynamically populated line cards -->
-            </div>
-          </div>
-
-          <!-- Needs action now: faults and urgent predictions -->
-          <section class="cockpit-section" id="sec-alerts" aria-labelledby="alerts-title">
-            <div class="cockpit-section-head">
-              <div class="csh-left">
-                <h2 id="alerts-title">Needs action now</h2>
-                <span class="csh-sub">Machine faults and urgent predictions. Open one to get a recovery plan.</span>
-              </div>
-            </div>
-            <div class="incident-queue-table" id="alert-list" aria-live="polite">
-              <div class="skeleton-block" style="height:120px;"></div>
-            </div>
-          </section>
 
           <!-- Machine health trends: the early-warning radar -->
           <section class="cockpit-section" id="sec-watch" aria-labelledby="watch-title">
@@ -859,38 +647,6 @@
           </button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- Explore How It Works Modal -->
-  <div class="modal-backdrop" id="how-modal" hidden>
-    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="how-title">
-      <div class="modal-head">
-        <h2 id="how-title">How Factory Decision Engine Works</h2>
-        <button class="icon-btn" data-close aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body modal-prose">
-        <div class="architecture-pillars">
-          <div class="pillar-card">
-            <div class="pillar-icon">01</div>
-            <h3>AI Reasons, Python Calculates</h3>
-            <p>Every number (capacity loss, delivery impact, cost, energy, plan scores) is computed by a deterministic engine in Python. Gemini interprets, reviews and explains; a grounding check flags any number it writes that the engine did not produce.</p>
-          </div>
-          <div class="pillar-card">
-            <div class="pillar-icon">02</div>
-            <h3>Grounded Specialist War Room</h3>
-            <p>Four Gemini specialists (Production, Quality, Maintenance, Energy) review the recommended plan in parallel, citing the plant's 18 engineering documents; a Decision Lead connects their concerns into one brief.</p>
-          </div>
-          <div class="pillar-card">
-            <div class="pillar-icon">03</div>
-            <h3>Mandatory Human Approval</h3>
-            <p>The system is strictly an intelligence tool, not an autonomous controller. Human shift managers review trade-offs, verify citations, and explicitly approve the action before dispatch notices are created.</p>
-          </div>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button type="button" class="btn btn-primary" id="btn-how-enter">Enter Decision Studio →</button>
-      </div>
     </div>
   </div>
 

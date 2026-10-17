@@ -8,6 +8,7 @@ blocking model and database calls. A lock serializes access to the shared conver
 """
 import hashlib
 import json
+import os
 import logging
 import threading
 from collections import Counter
@@ -72,10 +73,13 @@ class DomainMiddleware:
         if not requested:
             from urllib.parse import parse_qs
             requested = (parse_qs(scope.get("query_string", b"").decode("latin-1")).get("domain") or [""])[0]
+        from app.prediction import alerts as _alerts
         token = domains.set_domain(requested)
+        viewer_token = _alerts.set_viewer(headers.get(b"x-fde-viewer", b"").decode("latin-1"))
         try:
             await self.app(scope, receive, send)
         finally:
+            _alerts.reset_viewer(viewer_token)
             domains.reset_domain(token)
 
 
@@ -119,6 +123,7 @@ class ApproveRequest(BaseModel):
     approver: str = Field(..., min_length=1, description="Name/role of the approving person")
     note: Optional[str] = Field(None, description="Optional approval note")
     idempotency_key: Optional[str] = Field(None, description="Optional stable client idempotency key")
+    incident_id: Optional[str] = Field(None, description="Alert this decision responds to; an approved fault leaves the inbox")
 
 @app.get("/api/health")
 def health_check():
@@ -142,10 +147,13 @@ def health_check():
 
 @app.get("/api/domains")
 def list_domains():
-    """Industry packs the viewer can switch between (same engine, different plant)."""
+    """Industry packs (same engine, different plant). The demo shows one plant; the selector
+    appears only when FDE_INDUSTRY_SWITCH is on (the packs share one layout, so switching
+    would show identical numbers under different names)."""
     return {
         "default": domains.DEFAULT_DOMAIN,
         "current": domains.current_domain(),
+        "switchable": os.getenv("FDE_INDUSTRY_SWITCH", "").strip().lower() in ("1", "true", "yes"),
         "domains": [domains.public_pack(key) for key in PACKS],
     }
 
@@ -301,24 +309,29 @@ def approve_decision(req: ApproveRequest):
     fingerprint = hashlib.sha256(json.dumps(decision_signature, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
     with _approval_lock:
-        for existing in decision_log.list_entries(50):
-            if req.idempotency_key and existing.get("idempotency_key") == req.idempotency_key:
-                return existing
-            if existing.get("fingerprint") == fingerprint:
-                return existing
+        entry = next((e for e in decision_log.list_entries(50)
+                      if (req.idempotency_key and e.get("idempotency_key") == req.idempotency_key)
+                      or e.get("fingerprint") == fingerprint), None)
+        if entry is None:
+            pack = generate_action_documents(agent.llm, req.decision, approver, req.note)
+            entry = decision_log.record({
+                **pack,
+                "fingerprint": fingerprint,
+                "idempotency_key": req.idempotency_key,
+                "domain": domains.current_domain(),
+                "machine_id": mach_id,
+                "downtime_hours": dt_hours,
+                "execution_mode": req.decision.execution_mode,
+                "cost_impact_usd": req.decision.selected_plan.cost_impact_usd,
+            })
 
-        pack = generate_action_documents(agent.llm, req.decision, approver, req.note)
-        entry = decision_log.record({
-            **pack,
-            "fingerprint": fingerprint,
-            "idempotency_key": req.idempotency_key,
-            "domain": domains.current_domain(),
-            "machine_id": mach_id,
-            "downtime_hours": dt_hours,
-            "execution_mode": req.decision.execution_mode,
-            "cost_impact_usd": req.decision.selected_plan.cost_impact_usd,
-        })
-        return entry
+    # The fault this plan answers is handled: it leaves the viewer's "Needs action now" list
+    if req.incident_id:
+        from app.prediction.alerts import resolve_fault
+        resolved = resolve_fault(req.incident_id, mach_id)
+        if resolved:
+            entry = {**entry, "resolved_incident": {"alert_id": resolved["alert_id"], "title": resolved["title"]}}
+    return entry
 
 @app.get("/api/decisions")
 def list_decisions(limit: int = 50):
@@ -588,9 +601,16 @@ def list_alerts():
 
 @app.post("/api/alerts/simulate")
 def simulate_alert():
-    """Demo trigger: raise the next scripted machine fault event."""
+    """Demo trigger: raise the next scripted machine fault event (visible to this viewer only)."""
     from app.prediction.alerts import simulate_fault
     return simulate_fault()
+
+
+@app.post("/api/alerts/clear")
+def clear_demo_faults():
+    """Remove this viewer's simulated faults."""
+    from app.prediction.alerts import clear_faults
+    return {"removed": clear_faults()}
 
 @app.get("/api/knowledge")
 def list_knowledge_documents():

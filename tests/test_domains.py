@@ -128,3 +128,13 @@ def test_api_switches_industry_per_request(client):
 
     # Unknown packs fall back to the default instead of failing
     assert client.get("/api/health", headers={"X-FDE-Domain": "nonsense"}).json()["domain"] in PACKS
+
+
+def test_industry_switch_is_hidden_unless_enabled(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import app
+    client = TestClient(app)
+    monkeypatch.delenv("FDE_INDUSTRY_SWITCH", raising=False)
+    assert client.get("/api/domains").json()["switchable"] is False
+    monkeypatch.setenv("FDE_INDUSTRY_SWITCH", "true")
+    assert client.get("/api/domains").json()["switchable"] is True

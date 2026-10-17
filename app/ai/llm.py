@@ -209,5 +209,6 @@ class GeminiService:
 
 def compact_json(data: Any, limit: int = 12_000) -> str:
     """Serialize context for prompts, truncated to keep requests small."""
-    text = json.dumps(data, default=str, separators=(",", ":"))
+    # ensure_ascii=False keeps "15–20%" as written; escaped it reads "15\u201320%" and its numbers are lost
+    text = json.dumps(data, default=str, separators=(",", ":"), ensure_ascii=False)
     return text if len(text) <= limit else text[:limit] + "...(truncated)"

@@ -92,6 +92,17 @@ DOMAIN_QUERIES = {
 }
 
 COMMON_RULES = """Rules:
+- Stay strictly in your own field. The panel is Production (orders, schedule, capacity), Quality (inspections,
+  defects, first-article inspection), Maintenance (machine condition, repair, restart) and Energy (kWh, energy
+  cost). Never raise a concern that belongs to another specialist: they cover it. Your headline and key_concern
+  must be about your own field.
+- Make one concrete point from YOUR documents in the EVIDENCE section where they apply, and cite that document.
+- The cause of the current breakdown is unknown unless REPORTED PROBLEM in the DECISION DATA states it. Never
+  write that the current downtime is "due to", "caused by" or "because of" anything else.
+- The failed machine is out of service now; never describe it as healthy or available.
+- Mention only conditions that apply to THIS plan (e.g. rules for degraded equipment only if a machine in the
+  plan is degraded). Avoid jargon such as "deterministically".
+- Never call a figure, rate or plant "synthetic" or "simulated"; present them as the plant's figures.
 - Use ONLY numbers that appear in the DECISION DATA. Never compute or invent new figures.
 - Cite document IDs (e.g. KB-QTY-001) only from the EVIDENCE section; never invent IDs.
 - Incident reports describe PAST events. Never present a past incident's cause as the cause of the current
@@ -156,10 +167,16 @@ def build_decision_context(decision, robustness: Optional[Dict[str, Any]] = None
         (p for p in decision.feasible_alternatives if p.plan_id != selected_id),
         key=lambda p: -(p.weighted_score or 0),
     )[:2]
+    interp = decision.scenario_interpretation or {}
     return {
         "scenario": decision.scenario_summary,
+        "reported_problem": interp.get("summary") or "Only the machine and downtime were reported; the cause is not stated.",
         "asset_chain": decision.dependency_chain.get("trace_summary"),
-        "failed_machine_status": decision.dependency_chain.get("machine_status"),
+        # The database status is from before the breakdown; say so, or agents call a down machine "healthy"
+        "failed_machine_status": (
+            f"down now (out of service for this scenario); its recorded status before the breakdown was "
+            f"{decision.dependency_chain.get('machine_status')}"
+        ),
         "impact": {k: v for k, v in decision.impact_summary.items() if k != "alternative_candidates"},
         "alternative_machines": decision.impact_summary.get("alternative_candidates", []),
         "affected_orders": decision.affected_orders,
@@ -254,6 +271,35 @@ def find_ungrounded_numbers(texts: List[str], grounding_text: str) -> List[str]:
     known = set(_numbers_in(grounding_text))
     flagged = {n for t in texts for n in _numbers_in(t or "") if n not in known and len(n) > 1}
     return sorted(flagged)
+
+
+_CAUSE_RE = re.compile(
+    r"\b(?:due to|caused by|because of|as a result of|resulting from|triggered by)\s+(?:an?\s+|the\s+)?"
+    r"([a-z][a-z\- ]{2,60}?)(?=[.,;:)]|\s+(?:and|which|that|on|in|at|for|with|while)\b|$)",
+    re.IGNORECASE,
+)
+_PAST_RE = re.compile(r"\b(?:past|previous(?:ly)?|precedent|earlier|historical(?:ly)?|history|last time|incident report|KB-INC-\w+)\b", re.IGNORECASE)
+_CAUSE_STOPWORDS = {"this", "that", "with", "from", "into", "machine", "current", "recent", "expected", "planned"}
+
+
+def find_unsupported_causes(texts: List[str], reported_text: str) -> List[str]:
+    """Causes the agents state ("due to a vacuum fault") whose key words appear nowhere in what was reported.
+
+    Generic phrases such as "due to the downtime" or "because of the capacity loss" pass, because those
+    words are in the scenario; a cause borrowed from a past incident report does not.
+    """
+    known = reported_text.lower()
+    flagged = []
+    for text in texts:
+        # Sentences that are explicitly about the past ("a past incident on M17 was due to …") are allowed:
+        # citing a precedent is fine, presenting it as today's cause is not
+        current = " ".join(s for s in re.split(r"(?<=[.!?])\s+", text or "") if not _PAST_RE.search(s))
+        for m in _CAUSE_RE.finditer(current):
+            phrase = m.group(1).strip()
+            words = [w for w in re.findall(r"[a-z]{4,}", phrase.lower()) if w not in _CAUSE_STOPWORDS]
+            if words and sum(w in known for w in words) * 2 < len(words):
+                flagged.append(m.group(0).strip())
+    return sorted(set(flagged))
 
 
 def _consensus_line(assessments: List[Dict[str, Any]]) -> str:
@@ -421,7 +467,9 @@ def run_war_room(decision, robustness: Optional[Dict[str, Any]] = None, model: O
         ]
         texts += [brief["summary"], brief["headline"], *brief["why"], *brief["watch_outs"],
                   *[d["note"] for d in brief["dependencies"]], *brief.get("conflicts", [])]
-    ungrounded = find_ungrounded_numbers(texts, context_json + json.dumps(evidence, default=str))
+    ungrounded = find_ungrounded_numbers(texts, context_json + json.dumps(evidence, default=str, ensure_ascii=False))
+    # Causes are checked against the facts only (not the documents, where past incidents live)
+    unsupported_causes = find_unsupported_causes(texts, context_json)
     if brief is not None:
         brief["specialist_note"] = brief.pop("specialist_consensus", None)
         brief["specialist_consensus"] = _consensus_line(assessments) if assessments else None
@@ -429,7 +477,8 @@ def run_war_room(decision, robustness: Optional[Dict[str, Any]] = None, model: O
         brief["objections"] = objections_from(assessments)
         brief["grounding_check"] = {
             "ungrounded_numbers": ungrounded,
-            "passed": not ungrounded,
+            "unsupported_causes": unsupported_causes,
+            "passed": not ungrounded and not unsupported_causes,
         }
     return assessments, brief
 

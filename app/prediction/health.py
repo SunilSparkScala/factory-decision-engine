@@ -148,7 +148,10 @@ def assess_machine(machine) -> Dict[str, Any]:
         "explanation": explanation,
         "signals": signals,
         "typical_repair_hours": list(typical_repair_hours(op)),
-        "sparkline": [p["vibration_mm_s"] for p in series[-48:]],
+        # The graph shows the signal that drives the warning (vibration when nothing is trending)
+        "sparkline": [p[driver or "vibration_mm_s"] for p in series[-48:]],
+        "sparkline_signal": signals[driver or "vibration_mm_s"]["label"],
+        "sparkline_threshold": signals[driver or "vibration_mm_s"]["threshold"],
     }
 
 

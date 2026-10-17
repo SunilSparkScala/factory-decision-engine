@@ -224,14 +224,16 @@ def test_ui_modules_served():
 
 def test_ui_reset_demo_and_tooltip_elements():
     """
-    Verify Reset Demo button and Delivery Delay Score tooltip exist in the served UI.
+    Verify the M17 example button and Delivery Delay Score tooltip exist in the served UI.
+    (The old "Reset Demo" link was removed: it duplicated this button and the M17 example chip.)
     """
     res = client.get("/")
     assert res.status_code == 200
     html = res.text
-    # 1. Reset control exists
-    assert 'id="btn-reset-demo"' in html
-    assert "↺ Reset Demo" in html
+    # 1. One-click M17 example exists
+    assert 'id="btn-empty-canonical"' in html
+    assert "Try the M17 example" in html
+    assert 'id="btn-reset-demo"' not in html
     # 2. Delivery Impact Score tooltip text exists
     expected_tooltip = "Lower is better: 0.00 indicates zero delay penalty; 1.00 indicates maximum delay penalty."
     assert expected_tooltip in html

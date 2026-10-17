@@ -6,41 +6,45 @@ import { h } from "../dom.js";
 const DONE_KEY = "fde-tour-done";
 const el = (sel) => () => document.querySelector(sel);
 
-function steps({ plantName, onTryIt }) {
+function steps({ plantName, prediction, onTryIt }) {
+  const machine = prediction?.machine_id || "This machine";
+  const hrs = prediction?.hours_to_alarm != null ? ` in about ${Math.round(prediction.hours_to_alarm)} hours` : " soon";
   return [
     {
       title: "Welcome to the Factory Decision Engine",
-      body: `When a machine breaks at ${plantName}, this shows what happens next, the ways to recover, and a recommendation reviewed by AI specialists, so you decide in minutes. AI reasons; every number comes from a deterministic engine.`,
-    },
-    {
-      target: el("#cockpit-fleet-card"),
-      title: "How the plant is doing",
-      body: "Every machine is in exactly one group: running normally, at risk, or stopped, so the three numbers add up to the total. After the tour, click a group to see those machines on the plant map.",
-    },
-    {
-      target: el("#sec-watch"),
-      title: "Machine health trends",
-      body: "The early-warning radar. We watch every machine's sensors, spot the ones heading for an alarm, and build a backup plan in advance. On the right, the big number is the expected time to the alarm and the small range under it is the likely window.",
-    },
-    {
-      target: el("#sec-alerts"),
-      title: "Needs action now",
-      body: "In a real plant, machines report faults here automatically. In this demo, the 🧪 button pretends to be a machine sending one. Machines predicted to reach an alarm within 36 hours also show up here. Click “Analyze impact” to get a recovery plan.",
+      lead: "Before you change the factory, understand what happens next.",
+      body: `When a machine breaks at ${plantName}, this app shows which orders are hit, every way to recover, and a recommendation checked by AI specialists. The final decision is always yours.`,
+      note: "This is a made-up demo factory. The AI explains and advises, but every number (lost units, cost, delays) is worked out by exact calculations, never guessed by the AI.",
     },
     {
       target: el("#quick-report"),
       title: "Report a disruption",
-      body: "Something the sensors can't see? Type it the way you'd say it, e.g. “M17 is down for about 6 hours, protect high-priority orders”. Gemini works out the machine, the duration and your priorities.",
+      body: "Type what happened in your own words, e.g. “pick-and-place on Line B stopped, maybe 6 hours, protect urgent orders.” Gemini reads it and finds which machine, for how long, and what to protect.",
+    },
+    {
+      target: el("#sec-alerts"),
+      title: "Needs action now",
+      body: "Machine breakdowns and machines about to fail show up here. “Demo: simulate a machine fault” adds a pretend breakdown so you can see how the app handles one (in a real plant, machines report this themselves). “Analyze impact” on any alert shows what that problem affects and the best way to recover.",
+    },
+    {
+      target: el("#cockpit-fleet-card"),
+      title: "How the plant is doing",
+      body: "A quick health check of all 36 machines: running normally, at risk (showing warning signs), or stopped. After the tour, click any of the three numbers to see where those machines are on the plant map.",
+    },
+    {
+      target: el("#sec-watch"),
+      title: "Machine health trends",
+      body: "The early warning: machines whose sensors show they're wearing out, with a backup plan ready for each. “~17 h” means the machine is expected to hit its alarm level in about 17 hours; once that's under 36 hours, it moves up to “Needs action now”.",
     },
     {
       target: el('.sidebar-tab[data-view="decide"]'),
       title: "Decision Studio",
-      body: "Every analysis opens here: the impact on lines and orders, the recovery options, the recommendation with the specialists' review, and documents ready once you approve. Nothing happens without your approval.",
+      body: "Every analysis opens here: what the problem affects, the ways to recover, and a recommendation reviewed by 4 AI specialists. You can also ask an AI agent “what if…?” questions. Nothing changes until you approve, and then the work orders are drafted for you.",
     },
     {
       target: el(".alert-item.kind-predictive"),
       title: "Try it now",
-      body: "This machine still reports “healthy”, but its trend says it will reach an alarm soon. See what the engine recommends before it fails.",
+      body: `${machine} still reports “healthy”, but its sensors say it will hit its alarm level${hrs}. See what the app recommends before it fails.`,
       action: { label: "Analyze it now →", run: onTryIt },
     },
   ];
@@ -120,7 +124,10 @@ export function startTour(opts) {
     index = Math.max(0, Math.min(list.length - 1, i));
     const step = list[index];
     title.textContent = step.title;
-    body.textContent = step.body;
+    body.replaceChildren(
+      ...(step.lead ? [h("strong", { class: "tour-lead" }, step.lead), " "] : []),
+      step.body,
+      ...(step.note ? [h("span", { class: "tour-note" }, step.note)] : []));
     counter.textContent = `${index + 1} of ${list.length}`;
     dots.replaceChildren(...list.map((_, j) => h("span", { class: j === index ? "on" : "" })));
     back.hidden = index === 0;
@@ -140,10 +147,13 @@ export function startTour(opts) {
       const r = target.getBoundingClientRect();
       const fits = r.top >= 70 && r.bottom <= window.innerHeight - 200;
       if (!fits) {
-        // keep clear of the sticky header; centre short targets, top-align tall ones
+        // scrollIntoView scrolls whichever container holds the target (the app scrolls its main
+        // area, not the window); centre short targets, top-align tall ones
+        target.scrollIntoView({ block: r.height > window.innerHeight * 0.45 ? "start" : "center" });
+        // if the window itself scrolled (narrow screens), keep the target clear of the sticky header
         const header = document.querySelector(".app-header")?.offsetHeight || 64;
-        const offset = r.height > window.innerHeight * 0.45 ? header + 16 : (window.innerHeight - r.height) / 2 - 80;
-        window.scrollTo({ top: window.scrollY + r.top - Math.max(header + 16, offset) });
+        const top = target.getBoundingClientRect().top;
+        if (top < header + 12) window.scrollBy(0, top - header - 12);
       }
     }
     place();

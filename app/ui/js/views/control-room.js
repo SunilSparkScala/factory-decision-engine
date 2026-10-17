@@ -17,12 +17,16 @@ let modalMachine = null;
 export function init(context) {
   ctx = context;
   $("#btn-simulate-fault").addEventListener("click", simulateFault);
+  $("#btn-clear-faults").addEventListener("click", clearFaults);
+  // An approved plan resolves its fault elsewhere; refresh the inbox next time it is shown
+  window.addEventListener("fde:alerts-changed", () => { loaded = false; });
   $("#quick-report").addEventListener("submit", (e) => {
     e.preventDefault();
     const text = $("#quick-report-input").value.trim();
     if (!text) { $("#quick-report-input").focus(); return; }
     $("#quick-report-input").value = "";
     ctx.showView("decide");
+    workspace.detachIncident();
     workspace.analyze(text, { fresh: true });
   });
   $("#btn-about-data").addEventListener("click", openAbout);
@@ -110,9 +114,9 @@ function renderKpis() {
 
   clear($("#health-groups"),
     group("normal", "Running normally", normal, () => "Working, no warning signs"),
-    group("risk", "At risk", atRisk, (list) => (list.length ? `Working now, but likely to fail soon: ${ids(list)}` : "No warning signs")),
+    group("risk", "At risk", atRisk, (list) => (list.length ? `Working now, but showing warning signs: ${ids(list)}` : "No warning signs")),
     group("stopped", "Stopped", stopped, (list) => (list.length
-      ? list.map((m) => `${m.machine_id} ${m.reported ? "fault reported" : m.status === "DOWN" ? "breakdown" : "planned maintenance"}`).join(" · ")
+      ? list.map((m) => `${m.machine_id} ${m.reported ? "fault reported" : m.status === "DOWN" ? "breakdown · repair under way" : "planned maintenance"}`).join(" · ")
       : "None")));
 
   const predicted = atRisk.filter((m) => m.status !== "DEGRADED");
@@ -133,73 +137,6 @@ function renderKpis() {
     ? `● ${state.alerts.length} need${state.alerts.length === 1 ? "s" : ""} action (${urgent} urgent)`
     : "● Nothing needs action";
   pill.className = `badge-status-dot${urgent ? " pulse" : ""}`;
-
-  // Executive KPI Strip rendering
-  const availRateEl = $("#kpi-avail-rate");
-  if (availRateEl) {
-    const operationalCount = (k.machines_running || 0) + (k.machines_degraded || 0);
-    const availPct = total ? ((operationalCount / total) * 100).toFixed(1) : "0.0";
-    availRateEl.textContent = `${availPct}%`;
-    $("#kpi-avail-val").textContent = `${operationalCount} / ${total}`;
-    $("#kpi-avail-breakdown").textContent = `${k.machines_running} healthy · ${k.machines_degraded} degraded · ${k.machines_stopped} stopped`;
-
-    const utilPct = k.factory_utilization_pct != null ? `${k.factory_utilization_pct.toFixed(1)}%` : "—";
-    $("#kpi-util-val").textContent = utilPct;
-    const barEl = $("#kpi-util-bar");
-    if (barEl) barEl.style.width = k.factory_utilization_pct != null ? `${Math.min(100, Math.max(0, k.factory_utilization_pct))}%` : "0%";
-    $("#kpi-util-sub").textContent = k.total_scheduled_24h_units != null ? `${num(k.total_scheduled_24h_units)} units scheduled / 24h` : "No scheduled units";
-
-    $("#kpi-delivery-badge").textContent = `${k.orders_due_24h} Due in 24h`;
-    $("#kpi-delivery-val").textContent = String(k.orders_active);
-    $("#kpi-delivery-sub").textContent = `${k.high_priority_due_24h} high-priority due in 24h (${k.orders_high_priority} total)`;
-
-    const incBadge = $("#kpi-incidents-badge");
-    if (incBadge) {
-      incBadge.textContent = urgent ? `${urgent} Urgent` : "Stable";
-      incBadge.className = `kpi-pill ${urgent ? "kpi-pill-urgent" : "kpi-pill-ok"}`;
-    }
-    $("#kpi-incidents-val").textContent = String(state.alerts.length);
-    const faultCount = state.alerts.filter((a) => a.kind === "fault").length;
-    const predCount = state.alerts.filter((a) => a.kind === "predictive").length;
-    $("#kpi-incidents-sub").textContent = `${faultCount} fault alert · ${predCount} predictive warning`;
-  }
-
-  // Production Line Utilization & Bottlenecks rendering
-  renderLineMeters();
-}
-
-function renderLineMeters() {
-  const grid = $("#cockpit-lines-grid");
-  if (!grid || !state.overview?.lines) return;
-
-  clear(grid, state.overview.lines.map((l) => {
-    const hasUtil = l.utilization_pct != null;
-    const utilVal = hasUtil ? l.utilization_pct : 0;
-    const utilDisplay = hasUtil ? `${num(l.utilization_pct, 1)}%` : "—";
-    const tone = utilVal > 80 ? "danger" : utilVal > 50 ? "primary" : "ok";
-    const statusTone = l.status === "OPERATIONAL" ? "badge-ok" : "badge-warn";
-
-    return h("div", { class: "line-card" },
-      h("div", { class: "line-card-head" },
-        h("div", {},
-          h("h4", { class: "line-title" }, l.name),
-          h("div", { class: "line-models" }, (l.supported_models || []).join(" · "))),
-        h("span", { class: `badge ${statusTone}` }, l.status)),
-      h("div", { class: "line-util-row" },
-        h("div", { class: "line-util-metric" },
-          h("span", { class: "line-util-num" }, utilDisplay),
-          h("span", { class: "line-util-lbl" }, "utilization")),
-        h("div", { class: "line-sched-metric" },
-          h("span", { class: "mono" }, `${num(l.scheduled_units_24h)} / ${num(l.capacity_24h)}`),
-          h("span", { class: "line-util-lbl" }, "units (24h)"))),
-      h("div", { class: "line-progress-wrap" },
-        h("div", { class: `line-progress-fill tone-${tone}`, style: `width: ${hasUtil ? Math.min(100, Math.max(0, utilVal)) : 0}%` })),
-      h("div", { class: "line-card-foot" },
-        h("span", { class: "line-orders-chip" }, `📦 ${l.order_count} orders (${l.high_priority_orders} high-pri)`),
-        l.bottleneck_station ? h("span", { class: "line-bottleneck-chip", title: `Bottleneck station: ${l.bottleneck_station.name}` },
-          `⚡ Bottleneck: ${l.bottleneck_station.station_id?.replace("STA_", "Station ")} (${l.bottleneck_station.capacity_per_hour} u/h)`) : null),
-    );
-  }));
 }
 
 function showMachines(list) {
@@ -222,6 +159,7 @@ function etaText(hoursToAlarm, range) {
 function renderAlerts(newId) {
   const list = $("#alert-list");
   const urgent = state.alerts.filter((a) => ["HIGH", "CRITICAL"].includes(a.severity)).length;
+  $("#btn-clear-faults").hidden = !state.alerts.some((a) => a.kind === "fault");
   const badge = $("#nav-alert-count");
   badge.hidden = urgent === 0;
   badge.textContent = String(urgent);
@@ -276,6 +214,19 @@ function analyzeAlert(alert) {
   workspace.analyzeWithIncident(alert);
 }
 
+async function clearFaults() {
+  try {
+    const { removed } = await api.clearFaults();
+    state.alerts = (await api.alerts()).alerts;
+    renderAlerts();
+    renderKpis();
+    renderMap();
+    toast(removed ? `Cleared ${removed} demo fault${removed === 1 ? "" : "s"}.` : "No demo faults to clear.");
+  } catch (e) {
+    toast(`Could not clear demo faults: ${e.message}`, { error: true });
+  }
+}
+
 async function simulateFault() {
   const btn = $("#btn-simulate-fault");
   setLoading(btn, true);
@@ -295,10 +246,11 @@ async function simulateFault() {
 
 // ------------------------------------------------------------------ machine health trends
 
-function sparkline(values, threshold) {
+function sparkline(values, threshold, label = "Sensor") {
   const w = 120, hgt = 32, pad = 2;
+  // The alarm line can sit above (vibration rising) or below (health score falling) the readings
   const max = Math.max(threshold ?? -Infinity, ...values);
-  const min = Math.min(...values);
+  const min = Math.min(threshold ?? Infinity, ...values);
   const sx = (i) => pad + (i / (values.length - 1)) * (w - pad * 2);
   const sy = (v) => hgt - pad - ((v - min) / (max - min || 1)) * (hgt - pad * 2);
   const ns = "http://www.w3.org/2000/svg";
@@ -306,8 +258,8 @@ function sparkline(values, threshold) {
   svg.setAttribute("viewBox", `0 0 ${w} ${hgt}`);
   svg.setAttribute("class", "spark");
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", "Vibration trend, last 48 hours; dashed line is the alarm level");
-  if (threshold !== undefined && threshold <= max) {
+  svg.setAttribute("aria-label", `${label} trend, last 48 hours; dashed line is the alarm level`);
+  if (threshold !== undefined) {
     const t = document.createElementNS(ns, "line");
     t.setAttribute("x1", pad); t.setAttribute("x2", w - pad);
     t.setAttribute("y1", sy(threshold)); t.setAttribute("y2", sy(threshold));
@@ -347,12 +299,14 @@ function renderWatchList() {
     return;
   }
   const alerted = new Set(state.alerts.filter((a) => a.kind === "predictive").map((a) => a.machine_id));
-  clear(list, items.map((w, idx) => {
-    const body = h("div", { class: "watch-body", hidden: idx !== 0 });
+  clear(list, items.map((w) => {
+    // Rows open only on click; a machine already in "Needs action now" keeps its backup plan there
+    const promoted = alerted.has(w.machine_id);
+    const body = h("div", { class: "watch-body", hidden: true });
     const vib = w.signals.vibration_mm_s;
     const toggle = h("button", {
       class: "watch-row",
-      "aria-expanded": idx === 0 ? "true" : "false",
+      "aria-expanded": "false",
       onclick: () => {
         body.hidden = !body.hidden;
         toggle.setAttribute("aria-expanded", String(!body.hidden));
@@ -362,13 +316,13 @@ function renderWatchList() {
         h("div", { class: "watch-name" },
           h("span", { class: "mono" }, w.machine_id),
           h("span", { class: `badge ${riskBadgeClass(w.risk_level)}` }, w.risk_level),
-          w.status !== "HEALTHY" ? h("span", { class: "badge" }, w.status.toLowerCase()) : h("span", { class: "badge badge-ok" }, `status healthy · ${num(w.health_score, 1)}%`),
-          alerted.has(w.machine_id)
-            ? h("span", { class: "badge badge-danger alert-link", role: "link", tabindex: "0", title: "This machine has been moved to Needs action now",
-                onclick: (e) => jumpToAlert(w.machine_id, e) }, "🔔 Alert raised")
+          w.status !== "HEALTHY" ? h("span", { class: "badge" }, w.status.toLowerCase()) : h("span", { class: "badge badge-ok" }, `status healthy · health ${num(w.health_score, 1)}%`),
+          promoted
+            ? h("span", { class: "badge badge-danger alert-link", role: "link", tabindex: "0", title: "Predicted to hit its alarm within 36 hours: go to its alert",
+                onclick: (e) => jumpToAlert(w.machine_id, e) }, "↑ In Needs action now")
             : null),
         h("div", { class: "watch-sub" }, `${machineTypeLabel(w.machine_type)} · ${lineName(w.line_id)} · ${w.driver_signal || ""} trend`)),
-      sparkline(w.sparkline, vib.threshold),
+      sparkline(w.sparkline, w.sparkline_threshold ?? vib.threshold, w.sparkline_signal),
       h("div", {
         class: "watch-eta",
         title: w.trend_model ? `${w.trend_model === "quadratic" ? "Accelerating-curve" : "Straight-line"} trend on the last 24 h; range from sensor noise` : null,
@@ -377,17 +331,19 @@ function renderWatchList() {
         etaRange(w.hours_to_alarm_range),
         "to alarm"));
 
-    body.append(
+    body.append(...[
       h("p", {}, w.explanation),
-      w.prebuilt_plan ? h("div", { class: "prebuilt" },
+      promoted ? h("button", { class: "link-btn watch-jump", onclick: (e) => jumpToAlert(w.machine_id, e) },
+        "Its backup plan is in “Needs action now” ↑") : null,
+      !promoted && w.prebuilt_plan ? h("div", { class: "prebuilt" },
         h("div", { class: "prebuilt-title" }, "Pre-built backup plan"),
         h("div", {}, h("strong", {}, w.prebuilt_plan.description)),
         h("div", { class: "watch-sub" },
           `If it fails (${w.prebuilt_plan.repair_range_hours[0]}–${w.prebuilt_plan.repair_range_hours[1]} h repair): `,
           `${w.prebuilt_plan.orders_at_risk} orders exposed (${w.prebuilt_plan.high_priority_at_risk} high-priority) · extra cost ${usd(w.prebuilt_plan.cost_impact_usd)}`)) : null,
-      w.prebuilt_plan ? h("div", {},
-        h("button", { class: "btn btn-secondary btn-sm", onclick: () => { ctx.showView("decide"); workspace.analyze(w.prebuilt_plan.analysis_prompt, { fresh: true }); } }, "Open full analysis →")) : null,
-    );
+      !promoted && w.prebuilt_plan ? h("div", {},
+        h("button", { class: "btn btn-secondary btn-sm", onclick: () => { ctx.showView("decide"); workspace.detachIncident(); workspace.analyze(w.prebuilt_plan.analysis_prompt, { fresh: true }); } }, "Open full analysis →")) : null,
+    ].filter(Boolean));
     return h("div", { class: "watch-item", id: `watch-${w.machine_id}` }, toggle, body);
   }));
 }
@@ -463,18 +419,17 @@ function humanStatus(m) {
 
 function openAbout() {
   const o = state.overview;
-  const pack = state.pack;
   clear($("#about-body"),
     h("p", {}, h("strong", {}, `${o?.plant.name || "The plant"} is synthetic.`),
-      " Real factory data is confidential, so this demo uses a realistic, made-up plant generated by a seeded script: the same plant every time, so results are reproducible."),
+      " Real factory data is confidential, so this demo uses a realistic, made-up plant: the same plant every time you open it."),
     h("ul", { class: "plain-list about-list" },
       h("li", {}, `3 production lines, 12 stations, ${o ? o.kpis.machines_total : "36"} machines`),
       h("li", {}, `${o ? o.kpis.orders_active : "55"} customer orders with priorities and due dates, and 220 schedule entries`),
       h("li", {}, "25 materials, 15 suppliers and 5 maintenance events"),
       h("li", {}, "18 engineering documents (manuals, SOPs, quality rules, incident reports) written for this plant"),
       h("li", {}, "72 hours of hourly sensor history per machine (vibration, temperature, current, health)")),
-    h("p", {}, h("strong", {}, "Same engine, any factory. "),
-      `Switch the Industry selector in the header to see the same engine run a different plant${pack ? ` (you are viewing ${pack.label})` : ""}. All numbers are calculated by the deterministic engine; AI explains and reviews them.`),
+    h("p", {}, h("strong", {}, "Not tied to one industry. "),
+      "The engine works for any plant built from production lines, stations and machines (electronics, automotive, appliances…). A plant is described by a configuration (its lines, machines, products and engineering documents), so another factory means a new configuration, not new code; the code includes an automotive configuration to prove it. Every number is calculated by the engine; the AI explains and reviews them."),
     h("p", { class: "fine-print" }, "In a real deployment the same structure would come from the plant's ERP, MES and maintenance systems."));
   $("#about-modal").hidden = false;
   $("#about-modal [data-close]").focus();

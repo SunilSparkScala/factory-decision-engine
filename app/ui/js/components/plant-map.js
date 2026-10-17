@@ -29,6 +29,8 @@ export function renderPlantMap(container, { lines, atRisk = new Set(), highlight
     canvas.appendChild(h("div", { class: "pm-row" },
       h("div", { class: "pm-line" },
         h("strong", {}, line.name),
+        // What the line is qualified to build, not just its main product: this decides where work can move
+        line.supported_models?.length ? h("span", { class: "pm-builds" }, `Builds: ${line.supported_models.join(", ")}`) : null,
         h("span", {}, `${line.order_count} orders · ${line.high_priority_orders} high-priority`)),
       h("div", { class: "pm-stations" }, cells)));
   }

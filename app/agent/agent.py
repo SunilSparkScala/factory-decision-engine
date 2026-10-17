@@ -231,7 +231,7 @@ class FactoryDecisionAgent:
         if not answer:
             raise RuntimeError("Agent returned no answer")
 
-        grounding_text = compact_json(context, 50_000) + json.dumps(evidence, default=str) + json.dumps(tool_responses, default=str)
+        grounding_text = compact_json(context, 50_000) + json.dumps(evidence, default=str, ensure_ascii=False) + json.dumps(tool_responses, default=str, ensure_ascii=False)
         known_docs = {e["id"] for e in evidence}
         for resp_val in tool_responses:
             if isinstance(resp_val, dict):
@@ -345,6 +345,7 @@ class FactoryDecisionAgent:
             clarification_needed=understood.get("clarification_needed"),
         )
         decision.robustness = self._robustness(decision, understood, priorities, constraints)
+        decision.scenario_interpretation = understood.get("interpretation")
 
         war_room = None
         if self.llm_available and decision.selected_plan is not None:
@@ -489,6 +490,8 @@ class FactoryDecisionAgent:
         res.assistant_message = interp.get("summary")
         priorities = understood.get("priorities") or res.objective_weights
         res.robustness = self._robustness(res, understood, priorities, res.applied_constraints)
+        # A follow-up changes parameters, not what was reported: keep the original report for the specialists
+        res.scenario_interpretation = res.scenario_interpretation or prev.scenario_interpretation
         war_room = None
         if self.llm_available and res.selected_plan is not None:
             with ThreadPoolExecutor(max_workers=1) as pool:

@@ -10,13 +10,16 @@ import {
 } from "../format.js";
 import { renderPlantMap } from "../components/plant-map.js?v=2.1";
 
-const CANONICAL_PROMPT = () => $("#step-input .example-btn[data-example='clear']").dataset.prompt;
 const STEP_IDS = ["#step-impact", "#step-options", "#step-recommendation", "#step-approve"];
 const AGENT_ICONS = { production: "🏭", quality: "🔍", maintenance: "🔧", energy: "⚡" };
 
 let ctx = { showView: () => {} };
 let progressTimers = [];
 let busy = false;
+// Each analysis gets a number; only the newest one may render (an older one that finishes late is dropped)
+let analysisSeq = 0;
+// What the last priority change did to the recommendation ({ changed, from }), shown on the card
+let priorityChange = null;
 let currentIncidentContext = null;
 
 export function init(context) {
@@ -32,15 +35,8 @@ export function init(context) {
     }
   });
 
-  $("#btn-clear-incident")?.addEventListener("click", () => {
-    currentIncidentContext = null;
-    const banner = $("#attached-incident-banner");
-    if (banner) banner.hidden = true;
-  });
+  $("#btn-clear-incident")?.addEventListener("click", detachIncident);
 
-  $("#btn-return-overview")?.addEventListener("click", () => {
-    ctx.showView("control");
-  });
   // Example reports fill the box so the user sees exactly what will be sent; they press Analyze
   for (const btn of $$("#step-input .example-btn")) {
     btn.addEventListener("click", () => {
@@ -51,7 +47,6 @@ export function init(context) {
       analyzeBtn.classList.add("pulse");
     });
   }
-  $("#btn-reset-demo").addEventListener("click", resetDemo);
   for (const btn of $$("#priority-presets button")) {
     btn.addEventListener("click", () => rerank(btn.dataset.priorities));
   }
@@ -117,14 +112,11 @@ export function prefill(text) {
   input.setSelectionRange(text.length, text.length);
 }
 
-function resetDemo() {
-  state.decision = null;
+/** A new report is a new situation: drop the alert it was attached to, if any. */
+export function detachIncident() {
   currentIncidentContext = null;
   const banner = $("#attached-incident-banner");
   if (banner) banner.hidden = true;
-  clear($("#chat-log"));
-  $("#approval-result").hidden = true;
-  analyze(CANONICAL_PROMPT(), { fresh: true });
 }
 
 export function analyzeWithIncident(alert) {
@@ -164,8 +156,12 @@ export async function analyze(payload, { fresh = false } = {}) {
     }
   }
 
-  if (busy) return;
+  // A newer request replaces one still running (e.g. the manager went back and opened another alert)
+  const seq = ++analysisSeq;
+  priorityChange = null;
   busy = true;
+  // Until the new answer arrives, the previous one is greyed out and can't be approved
+  $("#view-decide").classList.add("is-reanalyzing");
   $("#scenario-input").value = promptText;
   state.lastPrompt = promptText;
   hideMessages();
@@ -175,22 +171,30 @@ export async function analyze(payload, { fresh = false } = {}) {
   try {
     const previous = fresh ? null : state.decision;
     const decision = await api.analyze(bodyPayload, previous);
+    if (seq !== analysisSeq) return;
     finishProgress();
     render(decision);
   } catch (e) {
+    if (seq !== analysisSeq) return;
     stopProgress();
     showError(e.message);
   } finally {
-    setLoading(btn, false);
-    busy = false;
+    if (seq === analysisSeq) {
+      setLoading(btn, false);
+      busy = false;
+      $("#view-decide").classList.remove("is-reanalyzing");
+    }
   }
 }
+
+const PROGRESS_LABELS = ["Gemini reads the report", "Engine calculates the options", "4 AI specialists review"];
 
 function startProgress() {
   const box = $("#progress");
   box.hidden = false;
+  $("#progress-title").textContent = "Working on it";
   const steps = $$(".progress-step", box);
-  steps.forEach((s) => s.classList.remove("active", "done"));
+  steps.forEach((s, i) => { s.className = "progress-step"; $(".ps-text", s).textContent = PROGRESS_LABELS[i]; });
   const live = state.health?.live_gemini_available;
   // Estimated timings: the server reports only the final result, so stages advance on a timer
   const schedule = live ? [0, 2000, 3000] : [0, 300, 600];
@@ -205,8 +209,33 @@ function startProgress() {
 
 function finishProgress() {
   progressTimers.forEach(clearTimeout);
-  $$(".progress-step").forEach((s) => { s.classList.remove("active"); s.classList.add("done"); });
-  setTimeout(() => { $("#progress").hidden = true; }, 700);
+}
+
+/** After a result, the progress row stays as "how this answer was made", showing what really ran. */
+function renderProgressSummary(d) {
+  const box = $("#progress");
+  const comps = d.ai_components || {};
+  const candidates = d.scenario_interpretation?.candidate_machine_ids || [];
+  if (!d.impact_summary?.machine_id && !candidates.length) { box.hidden = true; return; } // not a disruption report
+  const options = (d.feasible_alternatives?.length || 0) + (d.infeasible_alternatives?.length || 0);
+  const review = comps.war_room;
+  const stages = [
+    comps.understanding === "gemini" ? ["done", "Gemini understood the report"] : ["done", "Rules read the report (Gemini unavailable)"],
+    !d.impact_summary?.machine_id ? ["waiting", "Engine waits for your answer above"]
+      : ["done", d.selected_plan ? `Engine calculated ${options} options` : "Engine found no feasible plan"],
+    !d.selected_plan ? ["waiting", "Specialist review follows"]
+      : review === "gemini" ? ["done", "4 AI specialists reviewed it"]
+      : review === "reviewing" || review === "pending" ? ["active", "4 AI specialists reviewing…"]
+      : review === "failed" ? ["failed", "Specialist review unavailable (retry in the review panel)"]
+      : ["waiting", "Specialist review skipped"],
+  ];
+  $$(".progress-step", box).forEach((s, i) => {
+    const [cls, text] = stages[i];
+    s.className = `progress-step ${cls}`;
+    $(".ps-text", s).textContent = text;
+  });
+  $("#progress-title").textContent = "How this answer was made";
+  box.hidden = false;
 }
 
 function stopProgress() {
@@ -229,11 +258,13 @@ function showError(message) {
 
 function render(decision) {
   renderInterpretation(decision);
+  renderProgressSummary(decision);
 
   if (!decision.selected_plan) {
     renderClarification(decision);
     if (!decision.impact_summary?.machine_id || decision.impact_summary?.error) {
       showSteps(false);
+      $("#empty-state").hidden = true;
       return;
     }
   }
@@ -253,6 +284,7 @@ function render(decision) {
 
 function showSteps(visible) {
   $("#empty-state").hidden = visible;
+  $("#rail-placeholder").hidden = visible;
   for (const id of STEP_IDS) $(id).hidden = !visible;
 }
 
@@ -284,6 +316,7 @@ function renderClarification(d) {
   const msg = d.clarification_needed || d.rationale;
   if (!msg) return;
   const candidates = d.scenario_interpretation?.candidate_machine_ids || [];
+  if (d.assistant_message && !candidates.length && !d.impact_summary?.machine_id) return;
   clear(box,
     h("div", { class: "callout-title" }, "I need one more detail"),
     h("div", {}, msg),
@@ -309,7 +342,7 @@ function reportDegradedAi(d) {
 function renderImpact(d) {
   const imp = d.impact_summary;
   const chain = d.dependency_chain;
-  $("#impact-scenario").textContent = d.scenario_summary;
+  $("#impact-scenario").textContent = `${chain.machine_id} down for ${hours(imp.downtime_hours)}`;
 
   const headerCtx = $("#header-scenario-context");
   if (headerCtx) {
@@ -328,9 +361,7 @@ function renderImpact(d) {
     node("Machine", chain.machine_id, `${machineTypeLabel(chain.machine_type)}`, "origin"), arrow(),
     node("Station", chain.station_id?.replace("STA_", "Station ") || "Station", stationOperation(chain.station_name)), arrow(),
     node("Line", chain.line_name || lineName(chain.line_id), `${pct((imp.capacity_loss_percentage || 0) / 100, 1)} capacity loss`), arrow(),
-    node("Operation", chain.operation_type ? humanize(chain.operation_type) : stationOperation(chain.station_name), "Routing step"), arrow(),
-    node("Orders", `${imp.affected_order_count} affected`, `${imp.high_priority_affected_count} high-priority`), arrow(),
-    node("Commitments", imp.high_priority_affected_count ? "SLA Risk" : "On-Time", humanize(imp.delivery_risk) + " delivery priority", imp.high_priority_affected_count ? "end" : ""),
+    node("Customer orders", `${imp.affected_order_count} affected`, `${imp.high_priority_affected_count} high-priority`, imp.high_priority_affected_count ? "end" : ""),
   );
 
   const card = (label, value, sub, tone = "") =>
@@ -339,7 +370,6 @@ function renderImpact(d) {
       h("div", { class: "impact-value" }, value),
       h("div", { class: "impact-sub" }, sub));
   clear($("#impact-cards"),
-    card("Machine", chain.machine_id, machineTypeLabel(chain.machine_type)),
     card("Downtime", hours(imp.downtime_hours), "Unplanned outage"),
     card("Capacity loss", `${num(imp.capacity_loss_units)} units`, `${num(imp.capacity_loss_percentage, 1)}% of line`, "danger"),
     card("Affected orders", String(imp.affected_order_count), `${(imp.affected_product_models || []).join(", ") || "Active models"}`),
@@ -348,13 +378,14 @@ function renderImpact(d) {
 
   const orderCountLabel = $("#orders-count-label");
   if (orderCountLabel) {
-    orderCountLabel.textContent = `${imp.affected_order_count} orders (${imp.high_priority_affected_count} high-priority)`;
+    orderCountLabel.textContent = `${imp.affected_order_count}, of which ${imp.high_priority_affected_count} high-priority`;
   }
 
   const table = $("#orders-table");
   clear(table,
     h("thead", {}, h("tr", {}, ["Order", "Model", "Qty", "Priority", "Due"].map((t) => h("th", {}, t)))),
-    h("tbody", {}, d.affected_orders.map((o) => h("tr", {},
+    // Most urgent deadline first: that is the order a manager checks first
+    h("tbody", {}, [...d.affected_orders].sort((a, b) => new Date(a.due_time) - new Date(b.due_time)).map((o) => h("tr", {},
       h("td", { class: "mono" }, o.order_id),
       h("td", {}, o.product_model),
       h("td", { class: "num" }, num(o.quantity)),
@@ -381,6 +412,29 @@ export function redrawMap() {
 }
 
 /** "What happens next on the plant floor": the broken machine, who can/can't help, where work moves. */
+/** "Line C is also qualified for NW-Speaker" when work moves to a line named after another product. */
+function otherLineQualified(d, targetLineId) {
+  const failedLine = d.dependency_chain?.line_id;
+  if (!targetLineId || targetLineId === failedLine) return null;
+  const models = d.impact_summary?.affected_product_models || [];
+  const line = (state.overview?.lines || []).find((l) => l.line_id === targetLineId);
+  if (!models.length || !line || !models.every((m) => (line.supported_models || []).includes(m))) return null;
+  return `${line.name.replace(/\s*\(.*\)$/, "")} is also qualified for ${models.join(", ")}`;
+}
+
+/** One line under the recommendation when work moves to a line named after another product. */
+function renderQualifiedNote(d) {
+  const sp = d.selected_plan;
+  const qualified = sp?.strategy_type === "MACHINE_TRANSFER" ? otherLineQualified(d, sp.target_line_id) : null;
+  let note = $("#rec-qualified");
+  if (!note) {
+    note = h("p", { class: "rec-qualified", id: "rec-qualified" });
+    $("#rec-summary").after(note);
+  }
+  note.textContent = qualified ? `✓ ${qualified}, so the move is allowed.` : "";
+  note.hidden = !qualified;
+}
+
 async function renderImpactMap(d) {
   const box = $("#impact-map");
   const hint = $("#impact-map-card .subcard-hint");
@@ -396,8 +450,9 @@ async function renderImpactMap(d) {
   const candidates = {};
   for (const p of d.candidate_plans) {
     if (p.strategy_type !== "MACHINE_TRANSFER" || !p.target_machine_id) continue;
+    const qualified = otherLineQualified(d, p.target_line_id);
     candidates[p.target_machine_id] = p.is_feasible
-      ? { ok: true, note: `can take over · extra cost ${usd(p.cost_impact_usd)}` }
+      ? { ok: true, note: `can take over${qualified ? ` · ${qualified}` : ""} · extra cost ${usd(p.cost_impact_usd)}` }
       : { ok: false, note: cantHelpReason(p.infeasibility_reasons) };
   }
   const sp = d.selected_plan;
@@ -409,6 +464,7 @@ async function renderImpactMap(d) {
     lines: state.overview.lines,
     overlay: { failed, target, candidates },
   });
+  renderQualifiedNote(d); // the plant layout may have arrived after the recommendation was drawn
 }
 
 // ------------------------------------------------------------------ step 3: options
@@ -477,28 +533,39 @@ function renderOptions(d) {
 
   const sorted = d.candidate_plans.slice().sort((a, b) => (b.is_feasible - a.is_feasible) || ((b.weighted_score ?? -1) - (a.weighted_score ?? -1)));
   clear($("#candidates-table"),
-    h("thead", {}, h("tr", {}, ["Plan", "Option", "Extra cost", "Delivery score", "Quality", "Risk", "Energy kWh", "Overall score", "Status"].map((t) => h("th", {}, t)))),
-    h("tbody", {}, sorted.map((p) => h("tr", { class: `${d.selected_plan?.plan_id === p.plan_id ? "is-selected" : ""}${p.is_feasible ? "" : " infeasible"}` },
-      h("td", { class: "mono" }, p.plan_id),
-      h("td", {}, planText(p, machine)),
+    // Plain columns only: lower is better for delivery, quality and risk; the score decides. The status sits
+    // under each option's name so the table fits a laptop screen.
+    h("thead", {}, h("tr", {}, [["Option"], ["Cost"], ["Delivery", "Delay penalty: lower is better"], ["Quality", "Quality risk: lower is better"],
+      ["Risk", "Operational risk: lower is better"], ["kWh", "Energy used"], ["Score", "Overall score weighted by your priorities: highest wins"]]
+      .map(([t, tip]) => h("th", tip ? { title: tip } : {}, t)))),
+    h("tbody", {}, sorted.map((p) => h("tr", { class: `${d.selected_plan?.plan_id === p.plan_id ? "is-selected" : ""}${p.is_feasible ? "" : " infeasible"}`, title: p.plan_id },
+      h("td", { class: "opt-name" }, planText(p, machine),
+        h("span", { class: "opt-status" }, p.is_feasible ? (d.selected_plan?.plan_id === p.plan_id ? "★ Recommended" : "Possible")
+          : `Not possible: ${cantHelpReason(p.infeasibility_reasons)}`)),
       h("td", { class: "num" }, usd(p.cost_impact_usd)),
       h("td", { class: "num" }, p.delivery_delay_score?.toFixed(2) ?? "—"),
       h("td", { class: "num" }, p.quality_penalty_score?.toFixed(2) ?? "—"),
       h("td", { class: "num" }, p.risk_score?.toFixed(2) ?? "—"),
       h("td", { class: "num" }, num(p.energy_kwh)),
-      h("td", { class: "num" }, p.weighted_score?.toFixed(4) ?? "—"),
-      h("td", {}, p.is_feasible ? (d.selected_plan?.plan_id === p.plan_id ? "Recommended" : "Feasible") : (p.infeasibility_reasons || []).join(" "))))),
+      h("td", { class: "num" }, p.weighted_score?.toFixed(3) ?? "—")))),
   );
 }
 
 async function rerank(priorities) {
   if (!state.decision || busy) return;
   busy = true;
+  const seq = analysisSeq;
   const seg = $("#priority-presets");
   seg.classList.add("busy");
   try {
-    const before = state.decision.selected_plan?.plan_id;
+    const beforePlan = state.decision.selected_plan;
+    const before = beforePlan?.plan_id;
     const res = await api.rerank(state.decision, priorities);
+    if (seq !== analysisSeq) return; // a new analysis started meanwhile; it owns the screen now
+    priorityChange = {
+      changed: before !== res.selected_plan?.plan_id,
+      from: beforePlan ? planText(beforePlan, res.impact_summary.machine_id) : null,
+    };
     // Re-ranking is instant and deterministic; the specialists then re-review automatically
     const reReview = Boolean(state.health?.live_gemini_available && res.selected_plan);
     if (reReview) res.ai_components = { ...res.ai_components, war_room: "reviewing" };
@@ -507,12 +574,17 @@ async function rerank(priorities) {
     toast(before === after
       ? "Same plan is still best under these priorities."
       : `New recommendation: ${planText(res.selected_plan, res.impact_summary.machine_id)}`);
+    // Make the link visible: the card that answers the priority change lights up
+    const card = $("#step-recommendation");
+    card.classList.remove("rec-updated");
+    void card.offsetWidth;
+    card.classList.add("rec-updated");
     if (reReview) autoReview(res);
   } catch (e) {
-    toast(`Re-ranking failed: ${e.message}`, { error: true });
+    if (seq === analysisSeq) toast(`Re-ranking failed: ${e.message}`, { error: true });
   } finally {
     seg.classList.remove("busy");
-    busy = false;
+    if (seq === analysisSeq) busy = false;
   }
 }
 
@@ -523,6 +595,7 @@ async function autoReview(decision) {
     if (state.decision !== decision) return;
     state.decision = reviewed;
     renderRecommendation(reviewed);
+    renderProgressSummary(reviewed);
     if (reviewed.ai_components?.war_room === "failed") {
       toast("Specialists are busy right now. The engine's numbers are complete; you can retry the review.");
     }
@@ -535,7 +608,21 @@ async function autoReview(decision) {
 
 // ------------------------------------------------------------------ step 4: recommendation
 
+/** "Based on: Lowest risk · Changed from: …", so the card says which priorities it answers. */
+function renderBasis(d) {
+  const preset = presetForWeights(d.objective_weights);
+  const button = [...$$("#priority-presets button")].find((b) => b.dataset.priorities === preset);
+  const top = Object.entries(d.objective_weights || {}).filter(([, v]) => v >= 0.3).sort((a, b) => b[1] - a[1]);
+  const basis = button ? button.textContent.trim() : top.map(([k]) => humanize(k)).join(" + ") || "Balanced";
+  const change = priorityChange;
+  clear($("#rec-basis"),
+    h("span", { class: "rec-basis-label" }, "Based on: ", h("b", {}, basis)),
+    change ? h("span", { class: `rec-basis-change${change.changed ? " changed" : ""}` },
+      change.changed ? `Changed from: ${change.from}` : "Still the best plan for these priorities") : null);
+}
+
 function renderRecommendation(d) {
+  renderBasis(d);
   const sp = d.selected_plan;
   const brief = d.decision_brief;
   const machine = d.impact_summary.machine_id;
@@ -549,11 +636,15 @@ function renderRecommendation(d) {
   }
 
   renderObjections(d);
+  $("#rec-lead-tag").hidden = !brief;
   $("#rec-title").textContent = brief?.headline || planText(sp, machine);
   $("#rec-summary").textContent = brief?.summary
     || `${planText(sp, machine)}. Chosen by the optimizer as the best balance of delivery, cost, quality, energy and risk under your priorities.`;
   $("#rec-plan-id").textContent = sp.plan_id;
+  $("#rec-strategy").title = sp.plan_id; // the internal plan code stays available on hover
   $("#rec-strategy").textContent = strategyLabel(sp.strategy_type);
+
+  renderQualifiedNote(d);
 
   const routeTag = $("#rec-route");
   if (routeTag) {
@@ -570,8 +661,12 @@ function renderRecommendation(d) {
     const ok = brief.grounding_check.passed;
     grounding.hidden = false;
     grounding.className = `badge ${ok ? "badge-ok" : "badge-warn"}`;
-    grounding.textContent = ok ? "✓ All AI numbers traced to engine data" : `⚠ ${brief.grounding_check.ungrounded_numbers.length} AI number(s) not found in engine data`;
-    grounding.title = ok ? "Every number the AI wrote appears in the deterministic engine output or the cited documents." : `Unverified: ${brief.grounding_check.ungrounded_numbers.join(", ")}`;
+    const nums = brief.grounding_check.ungrounded_numbers || [];
+    const causes = brief.grounding_check.unsupported_causes || [];
+    grounding.textContent = ok ? "✓ All AI numbers traced to engine data"
+      : nums.length ? `⚠ ${nums.length} AI number(s) not found in engine data` : "⚠ AI stated a cause that was not reported";
+    grounding.title = ok ? "Every number the AI wrote appears in the deterministic engine output or the cited documents, and it states no cause that was not reported."
+      : [nums.length ? `Unverified numbers: ${nums.join(", ")}` : null, causes.length ? `Cause not in the report: ${causes.join("; ")}` : null].filter(Boolean).join("\n");
   } else {
     grounding.hidden = true;
   }
@@ -592,7 +687,8 @@ function renderRecommendation(d) {
 
   // Say honestly who wrote the explanation: Gemini, or the rule-based fallback
   const aiTag = $("#rec-ai-source");
-  if (aiTag) aiTag.textContent = brief ? "Reasoning: Gemini" : "Reasoning: rule-based (AI not used)";
+  const reviewing = ["reviewing", "pending"].includes(d.ai_components?.war_room);
+  if (aiTag) aiTag.textContent = brief ? "Reasoning: Gemini" : reviewing ? "Reasoning: Gemini reviewing…" : "Reasoning: rule-based (AI not used)";
 
   const why = brief?.why?.length ? brief.why : fallbackWhy(d);
   const watch = brief?.watch_outs?.length ? brief.watch_outs : d.risks;
@@ -600,9 +696,16 @@ function renderRecommendation(d) {
     "Review the specialist conditions and evidence below.",
     "Approve to record the decision and draft the floor documents.",
   ];
-  clear($("#rec-why"), why.map((t) => h("li", {}, h("span", {}, t))));
-  clear($("#rec-watch"), watch.map((t) => h("li", {}, h("span", {}, t))));
-  clear($("#rec-next"), next.map((t) => h("li", {}, h("span", {}, t))));
+  // Three reasons are enough; the specialists' conditions live in their cards below, so the separate
+  // watch-out list is only shown when there is no specialist review (rule-based risks then)
+  clear($("#rec-why"), why.slice(0, 3).map((t) => h("li", {}, h("span", {}, t))));
+  const reviewed = Boolean(d.specialist_assessments?.length);
+  $("#rec-watch-col").hidden = reviewed || !watch?.length;
+  $(".rec-rationale-columns").classList.toggle("single", reviewed || !watch?.length);
+  clear($("#rec-watch"), (watch || []).map((t) => h("li", {}, h("span", {}, t))));
+  // Approval is the button itself, so it is not repeated as a step
+  const steps = next.filter((t) => !/\bapprov/i.test(t));
+  clear($("#rec-next"), (steps.length ? steps : next).map((t) => h("li", {}, h("span", {}, t))));
 
   renderRobustness(d);
   renderWarRoom(d);
@@ -648,7 +751,7 @@ function renderRobustness(d) {
     const next = rb.segments[i + 1];
     const start = i === 0 ? 0 : s.from_hours;
     const end = next ? next.from_hours : maxH;
-    const cls = !s.plan_id ? "none" : s.is_recommended ? "rec" : "alt";
+    const cls = !s.plan_id ? "none" : s.is_recommended ? "rec" : `alt alt-${(s.strategy || "").toLowerCase()}`;
     const label = !s.plan_id ? "No feasible plan" : s.is_recommended ? `This plan` : strategyLabel(s.strategy);
     const widthPct = ((end - start) / maxH) * 100;
     const range = s.from_hours === s.to_hours ? `${s.from_hours} h` : `${s.from_hours}–${s.to_hours} h`;
@@ -663,14 +766,49 @@ function renderRobustness(d) {
   if (rb.downtime_range) {
     bar.appendChild(h("div", { class: "robust-range", style: `left:${pos(rb.downtime_range[0])};width:calc(${pos(rb.downtime_range[1])} - ${pos(rb.downtime_range[0])})`, title: "Stated downtime range" }));
   }
-  const marker = h("div", { class: "robust-marker", style: `left:${pos(rb.base_downtime_hours)}`, "data-label": `${num(rb.base_downtime_hours, 1)} h` });
-  bar.appendChild(marker);
+  // The marker sits outside the bar so its label is not clipped
+  wrap.appendChild(h("div", { class: "robust-marker", style: `left:${pos(rb.base_downtime_hours)}`, "data-label": `Your estimate: ${num(rb.base_downtime_hours, 1)} h` }));
   const axis = h("div", { class: "robust-axis", "aria-hidden": "true" },
     [0, 8, 16, 24, 32, 40, 48].filter((t) => t <= maxH).map((t) => h("span", { style: `left:${pos(t)}` }, `${t}h`)));
   const verdict = rb.downtime_range
     ? (rb.holds_for_stated_range ? `✓ Holds across the full ${rb.downtime_range[0]}–${rb.downtime_range[1]} h estimate.` : `⚠ The best plan changes within the ${rb.downtime_range[0]}–${rb.downtime_range[1]} h estimate.`)
     : null;
-  clear(box, wrap, axis, h("p", { class: "robust-summary" }, verdict ? h("strong", {}, verdict + " ") : null, rb.summary));
+  // Legend: one entry per kind of plan that wins somewhere, so every colour has a name
+  const machine = d.impact_summary.machine_id;
+  const kinds = [];
+  for (const s of rb.segments) {
+    const key = !s.plan_id ? "none" : s.is_recommended ? "rec" : `alt alt-${(s.strategy || "").toLowerCase()}`;
+    if (kinds.some((k) => k.key === key)) continue;
+    kinds.push({ key, text: !s.plan_id ? "No feasible plan" : s.is_recommended ? `This plan: ${planText(d.selected_plan, machine)}` : strategyLabel(s.strategy) });
+  }
+  const legend = h("div", { class: "robust-legend" }, kinds.map((k) => h("span", {}, h("i", { class: `robust-seg ${k.key}` }), k.text)));
+  clear(box, wrap, axis, legend, h("p", { class: "robust-summary" }, verdict ? h("strong", {}, verdict + " ") : null, robustSentence(d)));
+}
+
+/** The robustness result in plain words, e.g. "… stays the best plan for any repair from 3 to 48 h, including your 8 h estimate." */
+function robustSentence(d) {
+  const rb = d.robustness;
+  const machine = d.impact_summary.machine_id;
+  const span = ([a, b]) => (a === b ? `${a} h` : `${a}–${b} h`);
+  const join = (rs) => rs.map(span).join(" and ");
+  const best = rb.segments.filter((s) => s.is_recommended).map((s) => [s.from_hours, s.to_hours]);
+  const est = rb.base_downtime_hours;
+  const atEstimate = best.some(([a, b]) => a <= est && est <= b);
+  const plan = planText(d.selected_plan, machine);
+  const parts = [best.length
+    ? `“${plan}” is the best plan for a repair of ${join(best)}${atEstimate ? `, including your ${num(est, 1)} h estimate` : ""}.`
+    : `“${plan}” is not the top choice at other downtimes.`];
+  const others = {};
+  for (const s of rb.segments) {
+    if (s.is_recommended) continue;
+    const name = s.plan_id ? strategyLabel(s.strategy).toLowerCase() : "no plan is feasible";
+    (others[name] ||= []).push([s.from_hours, s.to_hours]);
+  }
+  for (const [name, rs] of Object.entries(others)) {
+    parts.push(name === "no plan is feasible" ? `At ${join(rs)}, no plan is feasible.` : `At ${join(rs)}, ${name} is better.`);
+  }
+  if (!atEstimate && best.length) parts.unshift("⚠ At your estimate a different plan scores higher.");
+  return parts.join(" ");
 }
 
 function renderWarRoom(d) {
@@ -694,9 +832,9 @@ function renderWarRoom(d) {
           h("span", { class: "agent-name" }, `${a.title} specialist`),
           h("span", { class: `badge ${stance.cls}`, style: "margin-left:auto" }, stance.text)),
         h("div", { class: "agent-headline" }, a.headline),
-        h("div", { class: "agent-text" }, a.assessment),
         a.key_concern ? h("div", { class: "agent-concern" }, h("strong", {}, "Condition: "), a.key_concern) : null,
-        a.citations?.length ? h("div", { class: "cite-row" }, a.citations.map(citeButton)) : null);
+        h("details", { class: "agent-more" }, h("summary", {}, "Read full review"), h("div", { class: "agent-text" }, a.assessment)),
+        a.citations?.length ? h("div", { class: "cite-row" }, h("span", { class: "cite-label" }, "Sources:"), a.citations.map(citeButton)) : null);
     });
     clear(box, cards, renderConnections(d));
     return;
@@ -723,7 +861,7 @@ function renderConnections(d) {
   if (!deps.length && !conflicts.length) return null;
   const titleOf = (key) => (d.specialist_assessments.find((a) => a.agent === key) || {}).title || humanize(key);
   return h("div", { class: "connections" },
-    h("h5", { class: "mini-head" }, "How the concerns connect"),
+    h("h5", { class: "mini-head" }, "How the concerns connect ", h("span", { class: "lead-note" }, "· found by the Decision Lead")),
     deps.map((dep) => h("div", { class: "connection" },
       h("span", { class: "conn-path" },
         h("span", { "aria-hidden": "true" }, AGENT_ICONS[dep.from_agent] || "◆"), ` ${titleOf(dep.from_agent)} `,
@@ -738,9 +876,12 @@ async function runReview(e) {
   const btn = e.currentTarget;
   setLoading(btn, true);
   try {
-    const res = await api.review(state.decision);
+    const asked = state.decision;
+    const res = await api.review(asked);
+    if (state.decision !== asked) return; // the manager moved on to another analysis
     state.decision = res;
     renderRecommendation(res);
+    renderProgressSummary(res);
     if (res.ai_components?.war_room === "failed") toast("Specialists are still busy. Try again in a minute.", { error: true });
   } catch (err) {
     toast(`Review failed: ${err.message}`, { error: true });
@@ -748,10 +889,21 @@ async function runReview(e) {
   }
 }
 
+// Titles and excerpts of all plant documents, loaded once, so a citation can say what it is
+let docIndex = null;
+let docIndexLoading = null;
+function loadDocIndex() {
+  docIndexLoading ||= api.knowledge()
+    .then((res) => { docIndex = Object.fromEntries((res.documents || []).map((doc) => [doc.document_id, doc])); })
+    .catch(() => { docIndexLoading = null; });
+  return docIndexLoading;
+}
+
 function citeButton(id) {
+  const doc = docIndex?.[id];
   return h("button", {
     class: "cite",
-    title: `Show ${id}`,
+    title: doc ? `${id} · ${doc.title} (click to show)` : `Show ${id}`,
     onclick: () => {
       const card = document.getElementById(`ev-${id}`);
       if (!card) return;
@@ -765,10 +917,20 @@ function citeButton(id) {
 }
 
 function renderEvidence(d) {
-  $("#evidence-summary").textContent = `Engineering Evidence (${d.engineering_evidence.length} documents cited)`;
+  // Titles arrive once; then redraw so citation hovers and specialist-only sources are complete
+  if (!docIndex) {
+    loadDocIndex().then(() => { if (state.decision === d && docIndex) { renderWarRoom(d); renderEvidence(d); } });
+  }
+  // Every document a specialist cited is listed, so its "Sources:" link always has somewhere to go
+  const listed = new Set(d.engineering_evidence.map((ev) => ev.document_id));
+  const citedOnly = [...new Set((d.specialist_assessments || []).flatMap((a) => a.citations || []))]
+    .filter((id) => !listed.has(id) && docIndex?.[id])
+    .map((id) => ({ ...docIndex[id], evidence_category: "Cited by a specialist" }));
+  const docs = [...d.engineering_evidence, ...citedOnly];
+  $("#evidence-summary").textContent = `Engineering Evidence (${docs.length} documents cited)`;
   const machine = d.impact_summary.machine_id;
-  clear($("#evidence"), d.engineering_evidence.length
-    ? d.engineering_evidence.map((ev) => {
+  clear($("#evidence"), docs.length
+    ? docs.map((ev) => {
         const assets = (ev.machine_ids && ev.machine_ids.length) ? ev.machine_ids.join(", ") : (machine || "Plant floor");
         return h("article", { class: "evidence-card", id: `ev-${ev.document_id}` },
           h("div", { class: "evidence-top" },
@@ -831,7 +993,9 @@ async function ask(question) {
     const beforeInfeasible = state.decision.infeasible_alternatives?.length || 0;
     const beforeSelected = state.decision.selected_plan?.plan_id;
     try {
-      const updatedDecision = await api.whatIf(state.decision, question);
+      const asked = state.decision;
+      const updatedDecision = await api.whatIf(asked, question);
+      if (state.decision !== asked) { pending.remove(); setLoading(btn, false); return; }
       const afterFeasible = updatedDecision.feasible_alternatives?.length || 0;
       const afterInfeasible = updatedDecision.infeasible_alternatives?.length || 0;
       const afterSelected = updatedDecision.selected_plan?.plan_id;
@@ -915,10 +1079,16 @@ async function submitApproval(e) {
   const btn = $("#btn-confirm-approve");
   setLoading(btn, true);
   try {
-    const entry = await api.approve(state.decision, name, $("#approver-note").value.trim() || null);
+    const entry = await api.approve(state.decision, name, $("#approver-note").value.trim() || null, currentIncidentContext?.alert_id);
     closeApproval();
     renderApproval(entry);
-    toast(`Decision ${entry.decision_id} approved and logged.`);
+    if (entry.resolved_incident) {
+      // the fault is handled: it leaves "Needs action now"
+      toast(`✓ ${entry.resolved_incident.title.split(" ")[0]} fault handled. Plan approved and logged as ${entry.decision_id}.`);
+      window.dispatchEvent(new CustomEvent("fde:alerts-changed"));
+    } else {
+      toast(`Decision ${entry.decision_id} approved and logged.`);
+    }
   } catch (err) {
     toast(`Approval failed: ${err.message}`, { error: true });
   } finally {

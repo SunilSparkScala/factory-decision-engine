@@ -271,7 +271,7 @@ def _generate_overtime_plan(
     return RecoveryPlan(
         plan_id="PLAN_OVERTIME_01",
         strategy_type=RecoveryStrategyType.OVERTIME,
-        description=f"Extend operating hours by {required_overtime_hours} overtime hours on machine {impact.machine.machine_id}",
+        description=f"Catch up with {required_overtime_hours:g} hours of overtime on machine {impact.machine.machine_id}",
         actions=[action],
         affected_order_ids=affected_order_ids,
         recovered_capacity_units=recovered_units,

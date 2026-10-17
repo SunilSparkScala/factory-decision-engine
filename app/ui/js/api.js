@@ -4,6 +4,16 @@
 let domain = null;
 try { domain = localStorage.getItem("fde-domain"); } catch { /* storage unavailable */ }
 
+// A random id per browser, so demo faults you raise are yours only (other viewers never see them)
+let viewer = null;
+try {
+  viewer = localStorage.getItem("fde-viewer");
+  if (!viewer) {
+    viewer = (crypto.randomUUID ? crypto.randomUUID() : `v-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    localStorage.setItem("fde-viewer", viewer);
+  }
+} catch { viewer = null; /* storage unavailable: faults are shared */ }
+
 export function getDomain() { return domain; }
 
 export function setDomain(key) {
@@ -15,6 +25,7 @@ async function request(method, url, body) {
   const headers = {};
   if (body) headers["Content-Type"] = "application/json";
   if (domain) headers["X-FDE-Domain"] = domain;
+  if (viewer) headers["X-FDE-Viewer"] = viewer;
   const res = await fetch(url, {
     method,
     headers,
@@ -39,6 +50,7 @@ export const api = {
   watchList: () => request("GET", "/api/watchlist"),
   alerts: () => request("GET", "/api/alerts"),
   simulateFault: () => request("POST", "/api/alerts/simulate"),
+  clearFaults: () => request("POST", "/api/alerts/clear"),
   knowledge: () => request("GET", "/api/knowledge"),
   machineDetail: (machineId) => request("GET", `/api/machines/${encodeURIComponent(machineId)}`),
   machineTelemetry: (machineId) => request("GET", `/api/machines/${encodeURIComponent(machineId)}/telemetry`),
@@ -51,6 +63,6 @@ export const api = {
   rerank: (decision, priorities) => request("POST", "/api/rerank", { decision, priorities }),
   review: (decision) => request("POST", "/api/review", { decision }),
   ask: (question, decision) => request("POST", "/api/ask", { question, decision }),
-  approve: (decision, approver, note) => request("POST", "/api/approve", { decision, approver, note }),
+  approve: (decision, approver, note, incidentId) => request("POST", "/api/approve", { decision, approver, note, incident_id: incidentId || null }),
   decisions: () => request("GET", "/api/decisions"),
 };

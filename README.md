@@ -26,19 +26,23 @@ flags any number the AI writes that does not appear in the engine's data or the 
 | **Ask about the decision** | "Why not overtime?" or "Explain this to my director": grounded answers with citations. |
 | **Closes the loop** | Approval records an audit entry and drafts the supervisor work order, quality notice, schedule changes and customer update. Nothing is executed automatically. |
 
-## One engine, any factory: industry packs
+## Not tied to one industry: plant configuration packs
 
-The same engine runs two synthetic plants, and each viewer can switch with the **Industry**
-selector in the header (their choice is per browser, so viewers don't affect each other):
+**The demo runs one plant: Northwind Electronics Plant 1 (Pune), a synthetic electronics factory**
+(lines: Routers · Smart speakers · Thermostats; M17 is a pick-and-place machine).
 
-| Pack | Plant | Lines | Example machine |
-|---|---|---|---|
-| **Electronics** (default) | Northwind Electronics Plant 1, Pune | Routers · Smart speakers · Thermostats | M17 = pick-and-place machine |
-| **Automotive** | Apex Automotive Plant 1, Chennai | Sedan · SUV · Compact | M17 = welding robot |
+The engine itself is not tied to electronics: it works for any plant built from production lines,
+stations and machines (electronics, automotive, appliances…). A plant is a **configuration pack** in
+`app/domains/packs.py` (plant and line names, process steps, products, fault scripts) plus its
+engineering documents in `knowledge/documents/<pack>/`. Adding another factory means adding a pack,
+not changing the engine. To show this, the code also ships an **automotive pack** (Apex Automotive
+Plant 1, Chennai: Sedan · SUV · Compact). It uses the same layout and numbers on purpose, so the
+regression suite (which runs on it) checks that every calculation is independent of the plant's
+vocabulary.
 
-Both packs share one structure and seed, so every calculation is identical; only the vocabulary,
-the 18 engineering documents (`knowledge/documents/<pack>/`) and the examples differ. Packs are
-defined in `app/domains/packs.py`; the API reads the pack from the `X-FDE-Domain` header.
+The industry selector is hidden in the demo, because both packs share one layout and would show
+identical numbers under different names. Set `FDE_INDUSTRY_SWITCH=true` to show it, or
+`FDE_DEFAULT_DOMAIN=automotive` to run the other pack.
 
 ## Quick walkthrough for judges (3 minutes)
 

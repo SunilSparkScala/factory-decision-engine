@@ -1,5 +1,5 @@
 // Factory Decision Engine — UI entry point.
-// Orchestrates Experience A (Cinematic Landing) & Experience B (Fixed Workspace Shell)
+// Wires the header, the left navigation and the four views.
 
 import { $, $$, h, clear, toast } from "./js/dom.js";
 import { api, getDomain, setDomain } from "./js/api.js";
@@ -11,25 +11,13 @@ import * as decisionLog from "./js/views/decision-log.js";
 import { startTour, tourDone } from "./js/components/tour.js";
 
 const VIEW_TITLES = {
-  landing: "Home",
   decide: "Decision Studio",
   control: "Factory Overview",
   evidence: "Engineering Evidence",
   log: "Decision Log",
 };
 
-/** Landing panel: the demo plant's real size, from the API. */
-async function loadHeroPlant() {
-  try {
-    const o = state.overview || await api.overview();
-    $("#hero-plant-name").textContent = `${o.plant.name}, ${o.plant.location}`;
-    $("#hero-plant-machines").textContent = String(o.kpis.machines_total);
-    $("#hero-plant-orders").textContent = String(o.kpis.orders_active);
-  } catch { /* the panel keeps its placeholders */ }
-}
-
 const VIEWS = {
-  landing: { isLanding: true, onShow: loadHeroPlant },
   decide: { el: "#view-decide", onShow: workspace.onShow },
   control: { el: "#view-control", onShow: controlRoom.onShow },
   evidence: { el: "#view-evidence", onShow: showEvidenceView },
@@ -39,18 +27,6 @@ const VIEWS = {
 export function showView(name) {
   if (!VIEWS[name]) name = "control";
 
-  const landingSection = $("#view-landing");
-  const appShell = $("#app-shell");
-
-  if (name === "landing") {
-    if (landingSection) landingSection.hidden = false;
-    if (appShell) appShell.hidden = true;
-    document.body.classList.add("is-landing");
-  } else {
-    if (landingSection) landingSection.hidden = true;
-    if (appShell) appShell.hidden = false;
-    document.body.classList.remove("is-landing");
-
     // Hide all view sections in app-shell except current
     for (const [key, view] of Object.entries(VIEWS)) {
       if (view.el) {
@@ -59,7 +35,10 @@ export function showView(name) {
       }
     }
 
-    // Update sidebar navigation active state
+    // Decision Studio needs the width: the menu shrinks to icons with short names there
+  document.body.classList.toggle("view-decide", name === "decide");
+
+  // Update sidebar navigation active state
     for (const tab of $$(".sidebar-tab")) {
       const isMatch = tab.dataset.view === name;
       tab.classList.toggle("active", isMatch);
@@ -70,8 +49,6 @@ export function showView(name) {
     // Update header breadcrumb
     const bc = $("#bc-view-name");
     if (bc) bc.textContent = VIEW_TITLES[name] || name;
-
-  }
 
   if (location.hash.split("?")[0] !== `#${name}`) {
     history.replaceState(null, "", `#${name}`);
@@ -94,14 +71,13 @@ function initTheme() {
 }
 
 async function initHealth() {
-  const pills = [$("#ai-status"), $("#ai-status-landing")].filter(Boolean);
-  const textNodes = [$("#ai-status-text"), $(".ai-status-text")].filter(Boolean);
+  const pills = [$("#ai-status")].filter(Boolean);
+  const textNodes = [$("#ai-status-text")].filter(Boolean);
 
   try {
     state.health = await api.health();
     const live = state.health.live_gemini_available;
     const provider = state.health.gemini_provider === "vertex_ai" ? " · Vertex AI" : "";
-    const label = live ? `Gemini Live${provider}` : "AI Offline · Rule-based";
 
     pills.forEach((p) => {
       p.classList.add(live ? "live" : "offline");
@@ -110,7 +86,8 @@ async function initHealth() {
         : "Deterministic optimization and simulation active. Gemini API key required for live generative specialists.";
     });
 
-    textNodes.forEach((t) => { t.textContent = label; });
+    // the provider part is dropped on phone widths (see .ai-provider in style.css)
+    textNodes.forEach((t) => t.replaceChildren(live ? "Gemini Live" : "AI Offline · Rule-based", live && provider ? h("span", { class: "ai-provider" }, provider) : ""));
   } catch {
     pills.forEach((p) => p.classList.add("offline"));
     textNodes.forEach((t) => { t.textContent = "Server unreachable"; });
@@ -124,29 +101,8 @@ function initNav() {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   }
 
-  // Header return to landing
-  $("#brand-home")?.addEventListener("click", () => showView("landing"));
-  $("#btn-back-landing")?.addEventListener("click", () => showView("landing"));
-
-  // Landing CTAs lead directly to Factory Overview as default operational hub
-  $("#btn-hero-enter")?.addEventListener("click", () => showView("control"));
-  $("#btn-enter-workspace")?.addEventListener("click", () => showView("control"));
-  $("#btn-how-enter")?.addEventListener("click", () => {
-    $("#how-modal").hidden = true;
-    showView("control");
-  });
-
-  // Modal triggers
-  const howModal = $("#how-modal");
-  $("#btn-how-it-works")?.addEventListener("click", () => { if (howModal) howModal.hidden = false; });
-  $("#btn-architecture")?.addEventListener("click", () => { if (howModal) howModal.hidden = false; });
-  $("#btn-explore-modal")?.addEventListener("click", () => { if (howModal) howModal.hidden = false; });
-
-  // Quick launch canonical scenario from landing hero
-  $("#btn-launch-m17")?.addEventListener("click", () => {
-    showView("decide");
-    workspace.analyze("M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.", { fresh: true });
-  });
+  // The logo goes to the Factory Overview, the app's starting point
+  $("#brand-home")?.addEventListener("click", () => showView("control"));
 
   $("#btn-empty-canonical")?.addEventListener("click", () => {
     workspace.analyze("M17 will be unavailable for 8 hours tomorrow. Keep high-priority deliveries on time while minimizing cost.", { fresh: true });
@@ -185,22 +141,25 @@ function initNav() {
 
   window.addEventListener("hashchange", () => {
     const raw = location.hash.slice(1).split("?")[0];
-    showView(raw || "landing");
+    showView(raw || "control");
   });
 }
 
 export function setPlantClock(iso) {
   const el = $("#plant-clock");
-  if (el) el.textContent = `🕗 ${plantTime(iso)}`;
+  // Demo data is built around one fixed moment, so say plainly that this is the plant's time, not today
+  if (el) el.replaceChildren("🕗 ", h("span", { class: "clock-label" }, "Plant time"), ` · ${plantTime(iso)}`);
 }
 
 async function initDomains() {
-  const selects = [$("#domain-select"), $("#domain-select-landing")].filter(Boolean);
+  const selects = [$("#domain-select")].filter(Boolean);
   try {
-    const { domains, default: fallback } = await api.domains();
+    const { domains, default: fallback, switchable } = await api.domains();
     state.domains = domains;
+    // The demo shows one plant unless the server turns the industry switch on; then a viewer's
+    // own choice (or a shared link's ?domain=) is used
     const linked = new URLSearchParams(location.hash.split("?")[1] || "").get("domain");
-    const wanted = linked || getDomain();
+    const wanted = switchable ? (linked || getDomain()) : fallback;
     const chosen = domains.some((d) => d.key === wanted) ? wanted : fallback;
     setDomain(chosen);
 
@@ -222,7 +181,6 @@ async function initDomains() {
         clear($("#evidence-catalog"));
         await controlRoom.reload();
         workspace.applyPack(pack);
-        if (!$("#view-landing").hidden) loadHeroPlant();
         toast(`Switched synthetic pack to ${pack.plant.name} (${pack.label})`);
       });
     });
@@ -230,6 +188,7 @@ async function initDomains() {
     state.pack = domains.find((d) => d.key === chosen);
     setOperationNames(state.pack);
     workspace.applyPack(state.pack);
+    if (!switchable) selects.forEach((sel) => { sel.closest(".domain-select").hidden = true; });
   } catch {
     selects.forEach((s) => {
       const wrap = s.closest(".domain-select");
@@ -280,6 +239,7 @@ async function openTour() {
   await controlRoomReady();
   startTour({
     plantName: state.overview?.plant?.name || "your plant",
+    prediction: state.alerts?.find((a) => a.kind === "predictive") || null,
     onTryIt: controlRoom.analyzeTopPrediction,
   });
 }
@@ -296,7 +256,7 @@ async function boot() {
   api.overview().then((o) => setPlantClock(o.plant_clock)).catch(() => {});
 
   const [view, query] = location.hash.slice(1).split("?");
-  // Default to Factory Overview for root / unless specific view is in hash (e.g. #landing)
+  // Default to Factory Overview when the link has no view
   const initialView = view || "control";
   showView(initialView);
 

@@ -8,7 +8,7 @@ engineering documents are synthetic.
 |---|---|---|
 | Technical merit & Gen AI | 40% | Gemini understanding, specialist war room, ADK tool-calling agent, grounding check, Vertex AI on Cloud Run |
 | Problem alignment & impact | 25% | Machine breakdowns and early warnings turned into an approved recovery plan in minutes |
-| Innovation & creativity | 25% | "AI reasons, Python calculates", robustness across repair times, predictive alerts with pre-built plans, one engine for any factory |
+| Innovation & creativity | 25% | "AI reasons, Python calculates", robustness across repair times, predictive alerts with pre-built plans, an industry-agnostic engine (plants are configuration packs) |
 | User experience | 10% | Guided tour, plain-language results, one action per alert, mandatory human approval |
 
 ## 1. Technical merit & Gen AI (40%)
@@ -31,7 +31,7 @@ so the audit log survives restarts. Without Gemini the app keeps working in rule
 identical numbers, and says so on screen.
 
 **Tests.** `python -m pytest`: 177 passed, 1 skipped (a live-key test). The suite pins the canonical
-numbers below, checks the grounding rules, both industry packs, approvals and the UI assets.
+numbers below, checks the grounding rules, both configuration packs, approvals and the UI assets.
 
 ## 2. Problem alignment & impact (25%)
 
@@ -39,7 +39,7 @@ When a machine stops, a plant manager has to decide quickly with incomplete info
 orders are hit, which machines could take over, and what each option costs. The app gives that
 answer, with the reasons, and leaves the decision to the person.
 
-Canonical scenario (synthetic Northwind Electronics Plant 1, identical in the automotive pack):
+Canonical scenario (synthetic Northwind Electronics Plant 1):
 
 | Metric | Value |
 |---|---|
@@ -63,8 +63,10 @@ extrapolation, not a trained ML model.
   where the recommendation holds and where another plan wins (`app/simulation/robustness.py`).
 - **Connected specialist review:** the Decision Lead links one department's condition to another
   (e.g. a quality inspection slows production's first hour) instead of just summarising.
-- **One engine, any factory:** an Industry selector switches between an electronics and an
-  automotive plant pack with the same engine and identical numbers (`app/domains/`).
+- **Industry-agnostic engine:** a plant is a configuration pack (layout, vocabulary, engineering
+  documents) in `app/domains/`. The demo runs an electronics plant; an automotive pack with the same
+  layout is included and the regression suite runs on it, showing the calculations do not depend on
+  the plant's vocabulary.
 - **What-if in conversation:** "No overtime?" re-runs the engine with the constraint (7 → 6 feasible
   plans) without changing the base scenario.
 
