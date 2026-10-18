@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.ai.llm import GeminiService
-from app.domains import get_pack
+from app.domains import get_pack, machine_label
 from app.agent.orchestrator import ScenarioParser
 
 logger = logging.getLogger(__name__)
@@ -84,9 +84,9 @@ def build_machine_catalog() -> List[Dict[str, Any]]:
     return [
         {
             "id": m.machine_id,
-            "type": m.machine_type,
+            "type": machine_label(m.machine_type),
             "station": station_names.get(m.station_id, m.station_id),
-            "line": f"{m.line_id} ({line_names.get(m.line_id, '')})",
+            "line": line_names.get(m.line_id, m.line_id),
             "status": m.status.value,
             "health": m.health_score,
         }
@@ -149,7 +149,7 @@ def understand_scenario(
     )
     context = f"CURRENT SCENARIO: {current_scenario}\n" if current_scenario else ""
     pack = get_pack()
-    vocabulary = "; ".join(f"{op['code']} = {op['noun']} ({op['display']})" for op in pack["operations"])
+    vocabulary = "; ".join(f"{op['display']} = {op['noun']}" for op in pack["operations"])
     request = (
         f"PLANT: {pack['plant']['name']} ({pack['label']})\nMACHINE TYPES: {vocabulary}\n\n"
         f"MACHINE CATALOG:\n{catalog_lines}\n\n{context}MESSAGE:\n{prompt}"

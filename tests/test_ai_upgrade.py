@@ -486,3 +486,21 @@ def test_grounding_reads_numbers_next_to_dashes_in_documents():
     evidence = {"maintenance": [{"id": "KB-MNT-002", "excerpt": "Speed Derating: Reduce cycle rate by 15–20%."}]}
     text = "Derate speed by 15 to 20 percent."
     assert find_ungrounded_numbers([text], json.dumps(evidence, ensure_ascii=False)) == []
+
+
+def test_ai_reads_readable_machine_and_line_names():
+    """Raw codes like PICK_AND_PLACE_Unit_2 or LINE_C leaked into the AI's text; it now reads plain names."""
+    import json
+
+    from app.agent.specialists import build_decision_context
+    from app.agent.understanding import build_machine_catalog
+    from app.domains import machine_label, use_domain
+
+    assert machine_label("PICK_AND_PLACE_Unit_2") in ("Pick-and-place Unit 2", "Welding Unit 2")
+    with use_domain("electronics"):
+        m17 = next(m for m in build_machine_catalog() if m["id"] == "M17")
+        assert m17["type"] == "Pick-and-place Unit 2" and m17["line"] == "Line B (Smart speakers)"
+        decision = DecisionOrchestrator().orchestrate(machine_id="M17", downtime_hours=8.0, priorities="delivery cost")
+        text = json.dumps(build_decision_context(decision))
+    assert "PICK_AND_PLACE_Unit" not in text and '"LINE_C"' not in text
+    assert "Line C (Thermostats)" in text

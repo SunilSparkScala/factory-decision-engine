@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from app.ai.llm import compact_json
-from app.domains import get_pack
+from app.domains import get_pack, machine_label
 from app.config import config
 
 logger = logging.getLogger(__name__)
@@ -147,8 +147,37 @@ def _plan_view(p, best_delivery: Optional[float] = None) -> Dict[str, Any]:
         "energy_kwh": p.energy_kwh,
         "energy_cost_usd": energy_cost,
         "target_machine": p.target_machine_id,
-        "target_line": p.target_line_id,
+        "target_line": _line_name(p.target_line_id),
     }
+
+
+def _line_name(line_id: Optional[str]) -> Optional[str]:
+    """'LINE_C' -> 'Line C (Thermostats)', so the AI never writes raw codes."""
+    if not line_id:
+        return line_id
+    return get_pack().get("lines", {}).get(line_id, line_id)
+
+
+def _asset_chain(chain: Dict[str, Any]) -> Optional[str]:
+    """'M17 (Pick-and-place Unit 2) -> Station B2 - Pick-and-place -> Line B (Smart speakers) -> 6 orders'."""
+    if not chain.get("machine_id"):
+        return chain.get("trace_summary")
+    return (
+        f"{chain['machine_id']} ({machine_label(chain.get('machine_type') or '')}) -> {chain.get('station_name')} -> "
+        f"{chain.get('line_name')} -> {chain.get('affected_order_count')} production orders -> delivery deadlines"
+    )
+
+
+def _readable_machines(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out = []
+    for c in candidates or []:
+        c = dict(c)
+        if c.get("machine_type"):
+            c["machine_type"] = machine_label(c["machine_type"])
+        if c.get("line_id"):
+            c["line"] = _line_name(c.pop("line_id"))
+        out.append(c)
+    return out
 
 
 def build_decision_context(decision, robustness: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -171,14 +200,14 @@ def build_decision_context(decision, robustness: Optional[Dict[str, Any]] = None
     return {
         "scenario": decision.scenario_summary,
         "reported_problem": interp.get("summary") or "Only the machine and downtime were reported; the cause is not stated.",
-        "asset_chain": decision.dependency_chain.get("trace_summary"),
+        "asset_chain": _asset_chain(decision.dependency_chain),
         # The database status is from before the breakdown; say so, or agents call a down machine "healthy"
         "failed_machine_status": (
             f"down now (out of service for this scenario); its recorded status before the breakdown was "
             f"{decision.dependency_chain.get('machine_status')}"
         ),
         "impact": {k: v for k, v in decision.impact_summary.items() if k != "alternative_candidates"},
-        "alternative_machines": decision.impact_summary.get("alternative_candidates", []),
+        "alternative_machines": _readable_machines(decision.impact_summary.get("alternative_candidates", [])),
         "affected_orders": decision.affected_orders,
         "recommended_plan": _plan_view(decision.selected_plan, best_delivery) if decision.selected_plan else None,
         "best_option_per_strategy": {k: _plan_view(v, best_delivery) for k, v in by_strategy.items()},

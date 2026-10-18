@@ -96,6 +96,15 @@ def operation_of(machine_type: str) -> str:
     return machine_type.rsplit("_Unit_", 1)[0].upper()
 
 
+def machine_label(machine_type: str) -> str:
+    """'PICK_AND_PLACE_Unit_2' -> 'Pick-and-place Unit 2' (the raw code stays in the data)."""
+    op = operation_of(machine_type)
+    profile = operation_profile(op)
+    unit = machine_type.rsplit("_Unit_", 1)[1] if "_Unit_" in machine_type else ""
+    name = profile["display"] if profile else op.replace("_", " ").capitalize()
+    return f"{name} Unit {unit}" if unit else name
+
+
 def public_pack(key: Optional[str] = None) -> Dict[str, Any]:
     """Pack fields the UI needs."""
     p = get_pack(key)

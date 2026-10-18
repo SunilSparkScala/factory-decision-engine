@@ -2139,3 +2139,8 @@ button { cursor: pointer; }
   .view-decide .tab-short { display: block; }
   .view-decide .sidebar-tab .nav-badge { position: absolute; top: 2px; right: 4px; min-width: 16px; height: 16px; font-size: 10px; }
 }
+
+/* Words use the normal font; the typewriter font stays for IDs, codes, tables and traces */
+.interp-chip, .rn-value, .prov-tag, .option-metrics dd, .header-context-chip, .badge-route {
+  font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: 0;
+}
