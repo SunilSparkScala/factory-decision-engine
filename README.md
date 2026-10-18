@@ -4,7 +4,8 @@
 
 **[Open the live demo](https://factory-decision-engine-627710168651.asia-south1.run.app)** (no login, runs on
 Google Cloud Run with Gemini on Vertex AI) · Google Cloud AI Builder Cup 2026, theme *Manufacturing:
-Intelligent Operations & Industrial Efficiency*
+Intelligent Operations & Industrial Efficiency* · Team **The Latency Breakers**: Aakash Doulwani (lead),
+Sunil Raju
 
 ![Decision Studio: M17 is down for 8 hours; the engine traces the impact and recommends moving its work to M26, reviewed by four Gemini specialists](docs/images/decision-studio.png)
 
@@ -34,7 +35,7 @@ Once a person approves, Gemini drafts the supervisor work order, quality notice,
 customer update. **Nothing changes in the plant without a person's sign-off.**
 
 **AI reasons, Python calculates.** Every number (lost units, cost, energy, delay, feasibility) comes
-from a deterministic simulation and optimization engine. Gemini understands, reviews and explains, but
+from a deterministic simulation and scoring engine. Gemini understands, reviews and explains, but
 never produces an authoritative number, and a grounding check flags any number in AI-written text that
 does not appear in the engine data or the cited documents.
 
@@ -43,7 +44,7 @@ does not appear in the engine data or the cited documents.
 | Where | What Gemini does |
 |---|---|
 | **Understanding a report** | Structured output turns *"the Unit 2 pick-and-place at B2 is down, maybe 6–10 h, keep it cheap, no overtime"* into machine, downtime range and priorities, validated against the plant's machine list. If the machine is unclear, it asks instead of guessing. |
-| **Voice** | Transcribes a spoken report or question, keeping machine IDs and numbers exact (*"em seventeen"* → M17) and dropping machine noise. Read aloud speaks the recommendation back. |
+| **Voice** | Transcribes a spoken report or question, keeping machine IDs and numbers exact (*"em seventeen"* → M17) and dropping machine noise. (Read aloud, which speaks the recommendation back, uses the browser's built-in speech.) |
 | **Specialist war room** | Production, Quality, Maintenance and Energy agents review the plan in parallel, each citing the plant's own documents. A Decision Lead links their concerns (e.g. the first-article inspection Quality requires before Production runs on the new machine) and writes the brief. |
 | **Ask about this plan** | A **Google ADK** tool-calling agent answers *"Why not overtime?"* or *"What if M26 breaks down too?"* by running new simulations, evaluations and document searches itself, and says what it ran. It remembers follow-up questions. |
 | **After approval** | Drafts the four floor documents, carrying the specialists' conditions and the next steps. |
@@ -64,7 +65,7 @@ numbers and says so on screen.
   status still reads "healthy", and builds the backup plan in advance.
 - **Approval with conditions:** the manager approves the plan together with the specialists'
   conditions, and the drafted documents carry them.
-- **Any plant, same engine:** a plant is a configuration pack (layout, products, documents), not new
+- **Not tied to one industry:** a plant is a configuration pack (layout, products, documents), not new
   code. See [Plant configuration packs](#plant-configuration-packs).
 
 ## Try it in 3 minutes
@@ -99,6 +100,8 @@ numbers and says so on screen.
 - The early-warning model is a transparent trend extrapolation, not a trained model.
 - The engine assumes a backup machine has free capacity and charges a flat transfer cost; it does not
   model labour skills. The assumed rates are listed with every decision.
+- Approvers type their name; next step: **Firebase Authentication** so only signed-in, named approvers
+  can sign off.
 
 ## Run it yourself
 
@@ -117,12 +120,11 @@ python -m uvicorn app.api:app --env-file .env --port 8000
 Open http://localhost:8000. Without a key the app runs in **rule-based mode**: every number and plan is
 identical, and the AI features show as offline.
 
-Tests: `python -m pytest` (214 tests; Gemini is mocked, so no key or network is needed).
+Tests: `python -m pytest` (213 pass, 1 live-key test skipped; Gemini is mocked, so no key or network is needed).
 
 **Gemini quotas.** An analysis uses about 6 model calls (understanding, 4 specialists and a lead); an Ask
-question adds a few, a voice note one, and approval one. On the free tier, Flash-Lite allows about 15
-requests per minute and the larger Flash models about 20 per day, so enable billing for demos (an
-analysis then costs a fraction of a cent). The app spreads roles across models, skips a model that is
+question adds a few, a voice note one, and approval one. Free-tier limits are low, so enable billing for
+demos (an analysis then costs a fraction of a cent). The app spreads roles across models, skips a model that is
 cooling down after a quota error, caches identical requests for 15 minutes and falls back to rule-based
 results instead of failing.
 
@@ -188,7 +190,8 @@ Browser (vanilla JS, no build)               FastAPI on Cloud Run (app/api.py)
 ## Plant configuration packs
 
 The demo runs one plant, **Northwind Electronics Plant 1** (Pune; lines: Routers · Smart speakers ·
-Thermostats). The engine works for any plant built from production lines, stations and machines: a
+Thermostats). The engine is not tied to one industry: it works for discrete-manufacturing plants built
+from production lines, stations and machines. A
 plant is a configuration pack in `app/domains/packs.py` (line names, process steps, products, fault
 scripts) plus its engineering documents in `knowledge/documents/<pack>/`. Adding a factory means adding
 a pack, not changing the engine.
