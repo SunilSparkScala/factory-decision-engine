@@ -506,3 +506,16 @@ def test_ai_reads_readable_machine_and_line_names():
         text = json.dumps(build_decision_context(decision))
     assert "PICK_AND_PLACE_Unit" not in text and '"LINE_C"' not in text
     assert "Line C (Thermostats)" in text
+
+
+def test_specialists_are_told_what_the_engine_verified():
+    """'Line C (Thermostats)' made a specialist object that speakers can't be built there; they now get the facts."""
+    from app.agent.specialists import build_decision_context
+    from app.domains import use_domain
+
+    with use_domain("electronics"):
+        decision = DecisionOrchestrator().orchestrate(machine_id="M17", downtime_hours=8.0, priorities="delivery cost")
+        ctx = build_decision_context(decision)
+    assert decision.selected_plan.target_machine_id == "M26"
+    assert "NW-Speaker" in ctx["recommended_plan"]["target_line_builds"]
+    assert "Line C (Thermostats) is qualified to build NW-Speaker" in ctx["engine_verified"]

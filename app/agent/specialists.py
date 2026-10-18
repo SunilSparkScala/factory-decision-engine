@@ -120,6 +120,9 @@ COMMON_RULES = """Rules:
 - The cause of the current breakdown is unknown unless REPORTED PROBLEM in the DECISION DATA states it. Never
   write that the current downtime is "due to", "caused by" or "because of" anything else.
 - The failed machine is out of service now; never describe it as healthy or available.
+- ENGINE_VERIFIED lists checks the engine already passed (machine working, same operation, capacity, the target
+  line builds the affected product). Treat them as facts: never object on those grounds, and do not judge what
+  a line can build from its name.
 - Mention only conditions that apply to THIS plan (e.g. rules for degraded equipment only if a machine in the
   plan is degraded). Avoid jargon such as "deterministically".
 - Never call a figure, rate or plant "synthetic" or "simulated"; present them as the plant's figures.
@@ -168,7 +171,36 @@ def _plan_view(p, best_delivery: Optional[float] = None) -> Dict[str, Any]:
         "energy_cost_usd": energy_cost,
         "target_machine": p.target_machine_id,
         "target_line": _line_name(p.target_line_id),
+        "target_line_builds": _line_models().get(p.target_line_id) if p.target_line_id else None,
     }
+
+
+def _line_models() -> Dict[str, List[str]]:
+    """Products each line is qualified to build, from the plant data."""
+    from app.factory.state import get_factory_state
+
+    try:
+        return {l.line_id: list(l.supported_models) for l in get_factory_state().production_lines}
+    except Exception as e:
+        logger.warning(f"Line models unavailable for the specialists: {e}")
+        return {}
+
+
+def _engine_verified(decision) -> Optional[str]:
+    """What the engine's hard checks already established about the recommended plan, in plain words."""
+    sp = decision.selected_plan
+    if sp is None:
+        return None
+    if sp.strategy_type != "MACHINE_TRANSFER" or not sp.target_machine_id:
+        return f"The recommended plan ({sp.description}) passed all of the engine's hard checks."
+    models = decision.impact_summary.get("affected_product_models") or []
+    line = _line_name(sp.target_line_id)
+    builds = ", ".join(_line_models().get(sp.target_line_id, []))
+    return (
+        f"Passed the engine's hard checks: {sp.target_machine_id} is working, does the same operation as the failed "
+        f"machine, has the capacity, and {line} is qualified to build {', '.join(models) or 'the affected products'} "
+        f"(it builds {builds}). These are facts, not assumptions."
+    )
 
 
 def _line_name(line_id: Optional[str]) -> Optional[str]:
@@ -230,6 +262,7 @@ def build_decision_context(decision, robustness: Optional[Dict[str, Any]] = None
         "alternative_machines": _readable_machines(decision.impact_summary.get("alternative_candidates", [])),
         "affected_orders": decision.affected_orders,
         "recommended_plan": _plan_view(decision.selected_plan, best_delivery) if decision.selected_plan else None,
+        "engine_verified": _engine_verified(decision),
         "best_option_per_strategy": {k: _plan_view(v, best_delivery) for k, v in by_strategy.items()},
         "runner_up_plans": [_plan_view(p, best_delivery) for p in runners_up],
         "infeasible_options": [
