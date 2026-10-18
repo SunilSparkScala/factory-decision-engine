@@ -2155,3 +2155,52 @@ button { cursor: pointer; }
 .interp-chip, .rn-value, .prov-tag, .option-metrics dd, .header-context-chip, .badge-route {
   font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: 0;
 }
+
+/* =========================================================================
+   VOICE: speak a report or question (mic button), hear the recommendation
+   (Read aloud). Logic in js/components/voice.js.
+   ========================================================================= */
+/* The text box and its mic share one row, also where the form stacks on phones */
+.mic-field { display: flex; align-items: stretch; gap: 6px; flex: 1; min-width: 0; }
+.mic-field > input { flex: 1; min-width: 0; }
+.mic-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 0 0 auto;
+  min-width: 34px; min-height: 32px; padding: 0 8px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-2);
+  font-size: 14px; line-height: 1; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease;
+}
+.mic-btn:hover { background: var(--surface-hover); color: var(--text); }
+.mic-btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.mic-text, .mic-hint { font-size: 12px; font-weight: 650; white-space: nowrap; }
+.mic-text:empty, .mic-hint:empty { display: none; }
+.mic-hint { font-weight: 500; opacity: 0.9; }
+/* Recording: unmistakably red and pulsing, so nobody leaves the mic open */
+.mic-btn.is-listening { background: var(--danger); border-color: var(--danger); color: #fff; animation: mic-pulse 1.3s ease-out infinite; }
+.mic-btn.is-working { color: var(--primary); border-color: var(--primary); cursor: progress; }
+@keyframes mic-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 55%, transparent); }
+  100% { box-shadow: 0 0 0 9px transparent; }
+}
+/* Decision Studio: the mic sits next to Run Analysis, on the right */
+.mic-actions { display: inline-flex; align-items: stretch; gap: 8px; margin-left: auto; }
+
+.read-aloud-btn {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 4px 10px;
+  border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border-strong);
+  color: var(--text-2); font-size: 11.5px; font-weight: 650; line-height: 1.2; cursor: pointer;
+}
+.read-aloud-btn:hover { background: var(--surface-hover); color: var(--text); }
+.read-aloud-btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.read-aloud-btn.is-reading { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+
+@media (max-width: 480px) {
+  .mic-hint { display: none; } /* "Listening…" alone, so the box keeps its width */
+}
+@media (prefers-reduced-motion: reduce) {
+  .mic-btn.is-listening { animation: none; }
+}
+/* Who transcribed the words: Gemini (from the recording) or the browser (fallback) */
+.voice-note { font-size: 11.5px; color: var(--text-3); margin-top: 4px; line-height: 1.4; }
+.voice-note.is-gemini { color: var(--primary); font-weight: 600; }
+.voice-note[hidden] { display: none; }
+.cockpit-quick-report + .voice-note { margin: -8px 18px 12px; }

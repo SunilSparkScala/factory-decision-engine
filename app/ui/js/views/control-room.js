@@ -8,6 +8,7 @@ import { state, atRiskIds } from "../state.js";
 import { num, usd, lineName, riskBadgeClass, plantTime, machineTypeLabel } from "../format.js";
 import { renderPlantMap } from "../components/plant-map.js";
 import * as workspace from "./workspace.js";
+import { attachMic } from "../components/voice.js";
 
 let ctx = { showView: () => {}, setPlantClock: () => {} };
 let loaded = false;
@@ -29,6 +30,7 @@ export function init(context) {
     workspace.detachIncident();
     workspace.analyze(text, { fresh: true });
   });
+  attachMic($("#quick-report-input"), { label: "Speak the report instead of typing" });
   $("#btn-about-data").addEventListener("click", openAbout);
   $("#btn-modal-simulate-machine").addEventListener("click", () => {
     if (!modalMachine) return;
