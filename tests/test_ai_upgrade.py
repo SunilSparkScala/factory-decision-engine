@@ -546,3 +546,13 @@ def test_ask_follow_up_carries_the_last_three_exchanges():
                           history=[{"question": "What if we move the work to M26?", "answer": "M26 can take it."}])
     assert "EARLIER IN THIS CONVERSATION" in seen["prompt"] and "move the work to M26" in seen["prompt"]
     assert res["grounding_check"]["passed"]
+
+
+def test_decision_lists_the_real_assumed_rates():
+    """The calculation details show the figures behind the numbers, not generic statements."""
+    from app.config import config as cfg
+
+    decision = DecisionOrchestrator().orchestrate(machine_id="M17", downtime_hours=8.0, priorities="delivery cost")
+    text = " ".join(decision.assumptions)
+    assert f"${cfg.OVERTIME_COST_PER_HOUR:g} per hour" in text and f"${cfg.TRANSFER_BASE_COST:g}" in text
+    assert "kWh per unit" in text and "lasts 8 h" in text

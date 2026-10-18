@@ -552,12 +552,18 @@ class DecisionOrchestrator:
             "overtime_threshold_limit",
         ]
 
-        # Assumptions
+        # The assumed figures behind every cost, energy and capacity number (from app/config.py), so a
+        # plant can check them or replace them with its own rates
+        from app.config import config as cfg
+
         assumptions = [
-            f"Failure initiated at {start_time or 'immediate operational shift'}.",
-            "Machine nominal throughput rates and line speeds remain at baseline specifications.",
-            "Deterministic cost benchmarks and capacity limits applied per factory policy.",
-            "Multi-objective optimization executed strictly via Python evaluation engine.",
+            f"The breakdown starts {('at ' + str(start_time)) if start_time else 'now (plant time)'} and lasts {downtime_hours:g} h.",
+            f"Overtime costs an assumed ${cfg.OVERTIME_COST_PER_HOUR:g} per hour, at most {cfg.MAX_OVERTIME_HOURS_PER_MACHINE:g} h per machine.",
+            f"Moving work to another machine has an assumed setup cost of ${cfg.TRANSFER_BASE_COST:g}; "
+            f"re-ordering the queue ${cfg.RESEQUENCE_BASE_COST:g}.",
+            f"Production that is not recovered costs an assumed ${cfg.UNRECOVERED_GAP_COST_PER_UNIT:g} per unit (late-delivery penalty).",
+            f"Energy: an assumed {cfg.ENERGY_KWH_PER_UNIT:g} kWh per unit at ${cfg.ENERGY_COST_PER_KWH:.2f} per kWh.",
+            "Machines run at their rated capacity; a backup machine's own schedule does not reduce the capacity it can lend.",
         ]
 
         return DecisionResponse(

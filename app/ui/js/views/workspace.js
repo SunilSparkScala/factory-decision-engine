@@ -1033,20 +1033,20 @@ function renderEvidence(d) {
     .map((id) => ({ ...docIndex[id], evidence_category: "Cited by a specialist" }));
   const docs = [...d.engineering_evidence, ...citedOnly];
   $("#evidence-summary").textContent = `Engineering Evidence (${docs.length} documents cited)`;
-  const machine = d.impact_summary.machine_id;
   clear($("#evidence"), docs.length
     ? docs.map((ev) => {
-        const assets = (ev.machine_ids && ev.machine_ids.length) ? ev.machine_ids.join(", ") : (machine || "Plant floor");
+        // Procedures and quality rules list no machines: they apply to the whole plant, not to the failed machine
+        const appliesTo = ev.machine_ids?.length ? ev.machine_ids.join(", ") : "whole plant";
         return h("article", { class: "evidence-card", id: `ev-${ev.document_id}` },
           h("div", { class: "evidence-top" },
             h("div", { class: "evidence-id-group" },
               h("span", { class: "badge badge-mono" }, ev.document_id),
               h("span", { class: "badge badge-doc-type" }, humanize(ev.evidence_category || ev.document_type)),
             ),
-            h("span", { class: "badge badge-asset" }, `Asset: ${assets}`)
+            h("span", { class: "badge badge-asset" }, `Applies to: ${appliesTo}`)
           ),
           h("div", { class: "evidence-title" }, ev.title),
-          h("blockquote", { class: "evidence-excerpt" }, `“${ev.excerpt}”`),
+          h("blockquote", { class: "evidence-excerpt" }, `“${readableExcerpt(ev.excerpt)}”`),
         );
       })
     : h("p", { class: "subcard-hint" }, "No supporting engineering document was retrieved for this pattern."));
@@ -1063,9 +1063,10 @@ function toolTrace(tools) {
 }
 
 function renderDetails(d) {
-  clear($("#agent-trace"), h("span", { class: "fine-print" },
-    "Numbers come from the deterministic engine. Questions that need new calculations are answered by the " +
-    "AI agent in “Ask about this decision”, which shows the tools it ran."));
+  clear($("#agent-trace"), h("p", { class: "calc-note" },
+    "Every number comes from the deterministic engine. Gemini understands the report and explains and reviews " +
+    "the plan; questions that need new calculations are answered by the Google ADK agent in “Ask about this plan”, " +
+    "which shows the tools it ran."));
 
   clear($("#weights"), Object.entries(d.objective_weights || {}).map(([k, v]) =>
     h("div", { class: "weight-row" },
