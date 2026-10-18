@@ -20,18 +20,20 @@ energy and scores come only from the deterministic engine (`app/simulation/`, `a
 | Gen AI component | What it does | Code |
 |---|---|---|
 | Scenario understanding | Gemini turns a plain-language report into machine, downtime range and priorities (structured output). Python validates the machine and ranges; if the machine is ambiguous it asks instead of guessing. | `app/agent/understanding.py` |
-| Specialist war room | Four Gemini specialists (Production, Quality, Maintenance, Energy) review the recommended plan in parallel and cite documents; a Decision Lead writes the brief and maps dependencies and conflicts between their concerns. Objections are detected from the specialists' own stances. | `app/agent/specialists.py` |
-| Tool-calling agent | Open questions in the Ask box ("What if M26 also breaks?") go to a Google ADK agent that calls the simulation, evaluation and knowledge-search tools itself; the UI shows which tools it ran. | `app/agent/agent.py`, `app/agent/tools.py` |
-| Grounding check | Any number the AI writes that does not appear in the engine output or the cited documents is flagged in the UI. | `find_ungrounded_numbers` in `app/agent/specialists.py` |
-| Approval documents | After a person approves, Gemini drafts the work order, quality notice, schedule summary and customer update from engine data (templates if AI is unavailable). | `app/agent/assistant.py` |
+| Voice input | Gemini on Vertex AI transcribes a spoken report or question (machine IDs and numbers kept exact, machine noise and filler dropped); browser speech recognition is the fallback. Read aloud speaks the recommendation, verdict and conditions. | `/api/transcribe` in `app/api.py`, `transcribe_audio` in `app/ai/llm.py`, `app/ui/js/components/voice.js` |
+| Specialist war room | Four Gemini specialists (Production, Quality, Maintenance, Energy) review the recommended plan in parallel and cite documents; a Decision Lead writes the brief and links only real knock-on effects between their concerns. Specialists are told which hard checks the engine already passed, judge only their own field and never invent a condition. Objections are detected from the specialists' own stances. | `app/agent/specialists.py` |
+| Tool-calling agent | "Ask about this plan" ("What if M26 breaks down too?") goes to a Google ADK agent that calls the simulation, evaluation and knowledge-search tools itself; the UI says in plain words what it ran. The last three questions and answers go with each new one, so follow-ups work. | `app/agent/agent.py`, `app/agent/tools.py` |
+| Grounding check | Any number the AI writes that does not appear in the engine output, the cited documents or the manager's own question is flagged in the UI, on answers and on all four approval documents. | `find_ungrounded_numbers` in `app/agent/specialists.py` |
+| Approval documents | After a person approves the plan with the specialists' conditions, Gemini drafts the work order, quality notice, schedule summary and customer update from engine data, carrying those conditions and the Decision Lead's next steps (templates if AI is unavailable). | `app/agent/assistant.py` |
 
 **Google Cloud.** Deployed on Cloud Run; Gemini is called through **Vertex AI** with the service's own
 identity (`gemini-3.5-flash-lite`, no API key). Approved decisions are stored in **Cloud Storage**,
 so the audit log survives restarts. Without Gemini the app keeps working in rule-based mode with
 identical numbers, and says so on screen.
 
-**Tests.** `python -m pytest`: 177 passed, 1 skipped (a live-key test). The suite pins the canonical
-numbers below, checks the grounding rules, both configuration packs, approvals and the UI assets.
+**Tests.** `python -m pytest`: 209 passed, 1 skipped (a live-key test). The suite pins the canonical
+numbers below, checks the grounding rules, both configuration packs, approvals and their documents,
+the voice endpoint and the UI assets.
 
 ## 2. Problem alignment & impact (25%)
 
@@ -77,8 +79,13 @@ extrapolation, not a trained ML model.
   action now, machine health trends and a plant map. Every alert has one action: *Analyze impact*.
 - Results in plain words (e.g. "Delivery: best achievable", "Quality risk: medium"); raw scores stay
   in the candidates table and the details panel.
-- Mandatory human approval: an explicit checkbox, plus a separate acknowledgement for any specialist
-  objection.
+- Decision Studio reads in order: 1 Report, 2 What this affects, 3 Compare the recovery options,
+  4 Recommendation, then specialist review, Ask about this plan, and Review & approve.
+- Speak instead of typing (🎤) and Read aloud (🔊) for hands-busy use on the shop floor.
+- Mandatory human approval: the manager approves the plan *with* the specialists' listed conditions,
+  with a name and an explicit checkbox, plus a separate acknowledgement for any specialist objection.
+- Engineering Evidence shows the only documents the AI may cite; Decision Log records each approved
+  decision in words, with its conditions and whether the documents' numbers were checked.
 
 ## Honest limits
 
