@@ -461,6 +461,8 @@ def test_cause_borrowed_from_an_old_incident_is_flagged():
     facts = "Unscheduled downtime on M17 for 8.0 hours. M17 will be down for 8 hours; capacity loss 211.2 units."
     borrowed = "M17 had 8.0 hours of unscheduled downtime due to a placement head vacuum fault."
     assert find_unsupported_causes([borrowed], facts) == ["due to a placement head vacuum fault"]
+    # "triggered by" in a sentence that is not about the breakdown is not a cause claim
+    assert find_unsupported_causes(["Extra cost is triggered by keeping the work on M23 with overtime."], facts) == []
     # A clearly labelled precedent is allowed
     precedent = "A past precedent on M17 involved an 8.0-hour downtime due to a placement head vacuum fault."
     assert find_unsupported_causes([precedent], facts) == []

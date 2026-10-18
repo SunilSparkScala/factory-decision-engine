@@ -829,14 +829,21 @@ function renderWarRoom(d) {
   const status = d.ai_components?.war_room;
   const consensus = $("#warroom-consensus");
   if (status === "reviewing") {
-    consensus.textContent = "Four AI specialists review the plan from their domain.";
+    consensus.className = "warroom-verdict"; consensus.textContent = "";
     clear(box, h("div", { class: "warroom-placeholder" },
       h("span", { class: "reviewing" }, h("span", { class: "spinner inline", "aria-hidden": "true" }),
         "Specialists are re-reviewing the plan for your new priorities…")));
     return;
   }
   if (d.specialist_assessments?.length) {
-    consensus.textContent = d.decision_brief?.specialist_consensus || "Four AI specialists reviewed the plan.";
+    // Counted from the specialists' own stances, never from AI wording
+    const all = d.specialist_assessments;
+    const n = (s) => all.filter((a) => a.stance === s).length;
+    const opposes = n("oppose"), cautions = n("caution"), supports = all.length - opposes;
+    consensus.className = `warroom-verdict${opposes ? " oppose" : ""}`;
+    consensus.textContent = opposes
+      ? `⚠ ${opposes} of ${all.length} oppose${opposes === 1 ? "s" : ""} this plan`
+      : `✓ ${supports} of ${all.length} support${cautions ? (cautions === all.length ? ", all with conditions" : ` · ${cautions} with conditions`) : ""}`;
     const cards = d.specialist_assessments.map((a) => {
       const stance = stanceInfo(a.stance);
       return h("article", { class: `agent-card agent-${a.agent}${a.stance === "oppose" ? " opposes" : ""}` },
@@ -852,7 +859,7 @@ function renderWarRoom(d) {
     clear(box, cards, renderConnections(d));
     return;
   }
-  consensus.textContent = "Four AI specialists review the plan from their domain.";
+  consensus.className = "warroom-verdict"; consensus.textContent = "";
   const messages = {
     pending: "Priorities changed, so the ranking was recalculated instantly. Run the specialist review for this new ranking.",
     failed: "The specialist agents are busy right now (Gemini rate limit). The engine's numbers above are complete.",

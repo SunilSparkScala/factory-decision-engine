@@ -23,11 +23,18 @@ logger = logging.getLogger(__name__)
 
 class SpecialistAssessment(BaseModel):
     stance: Literal["support", "caution", "oppose"] = Field(
-        description="support: plan is sound from your domain. caution: acceptable with conditions. oppose: unsafe/unsound."
+        description="support: sound from your field, no condition needed. caution: acceptable only if a specific "
+        "condition from your field is met. oppose: unsafe or unsound."
     )
-    headline: str = Field(description="At most 14 words, plain English.")
+    headline: str = Field(
+        description="Your judgement in at most 14 words, plain English, sentence case. Do not just restate figures."
+    )
     assessment: str = Field(description="2-3 sentences for a plant manager, grounded in the provided data.")
-    key_concern: Optional[str] = Field(None, description="The single most important condition or risk, if any.")
+    key_concern: Optional[str] = Field(
+        None,
+        description="The one condition your field requires, taken from the data or your documents. Leave empty if "
+        "your field has no real concern; never invent one.",
+    )
     citations: List[str] = Field(default_factory=list, description="Document IDs from EVIDENCE you relied on.")
 
 
@@ -55,7 +62,8 @@ class DecisionBrief(BaseModel):
     next_steps: List[str] = Field(description="2-4 concrete next steps for the shift, in a sensible order.")
     dependencies: List[ConcernLink] = Field(
         default_factory=list,
-        description="Where one specialist's condition affects another department (0-3 links).",
+        description="Where one specialist's condition really holds up or changes another department's work (0-3 "
+        "links). Leave empty rather than add a weak or generic link.",
     )
     conflicts: List[str] = Field(
         default_factory=list,
@@ -66,24 +74,28 @@ class DecisionBrief(BaseModel):
 SPECIALISTS: List[Dict[str, str]] = [
     {
         "key": "production",
+        "leave": "Leave inspections and defects to Quality, machine condition to Maintenance, and energy to Energy.",
         "name": "production_specialist",
         "title": "Production",
         "focus": "capacity recovery, schedule adherence, which orders and customers are protected or delayed, line balance.",
     },
     {
         "key": "quality",
+        "leave": "Leave order scheduling to Production, machine repair and setup to Maintenance, and energy to Energy.",
         "name": "quality_specialist",
         "title": "Quality",
         "focus": "defect and process risk of the change, first-article inspection and transfer requirements, target machine health.",
     },
     {
         "key": "maintenance",
+        "leave": "Leave inspections to Quality, order scheduling to Production, and energy to Energy.",
         "name": "maintenance_specialist",
         "title": "Maintenance",
         "focus": "health and status of the failed and target machines, restart and repair protocol, risk of loading degraded equipment.",
     },
     {
         "key": "energy",
+        "leave": "Leave inspections, scheduling and machine condition to the others. Your headline says whether energy is a concern for this plan; do not just repeat the kWh or cost figures.",
         "name": "energy_specialist",
         "title": "Energy & Sustainability",
         "focus": "energy use (kWh) and energy cost of each option, overtime energy, sustainability trade-offs.",
@@ -103,6 +115,8 @@ COMMON_RULES = """Rules:
   cost). Never raise a concern that belongs to another specialist: they cover it. Your headline and key_concern
   must be about your own field.
 - Make one concrete point from YOUR documents in the EVIDENCE section where they apply, and cite that document.
+- If your field has no real concern for this plan, say so plainly (stance support, empty key_concern). Never
+  invent risks or conditions that are not in the DECISION DATA or your documents.
 - The cause of the current breakdown is unknown unless REPORTED PROBLEM in the DECISION DATA states it. Never
   write that the current downtime is "due to", "caused by" or "because of" anything else.
 - The failed machine is out of service now; never describe it as healthy or available.
@@ -263,7 +277,7 @@ def gather_domain_evidence(decision) -> Dict[str, List[Dict[str, Any]]]:
 def _specialist_instruction(spec: Dict[str, str]) -> str:
     return (
         f"You are the {spec['title']} specialist in a factory disruption war room at {get_pack()['plant']['name']}.\n"
-        f"Review the RECOMMENDED PLAN strictly from your domain: {spec['focus']}\n"
+        f"Review the RECOMMENDED PLAN strictly from your domain: {spec['focus']}\n{spec.get('leave', '')}\n"
         f"Compare it with the other options only where relevant to your domain.\n{COMMON_RULES}"
     )
 
@@ -276,6 +290,8 @@ Connect the reviews like a real plant meeting:
 - dependencies: where one specialist's condition affects another department (e.g. a Quality inspection
   and a Maintenance calibration both delay full output, which matters to Production). Describe the effect
   qualitatively; never invent durations or figures that are not in the DECISION DATA.
+- Only link real knock-on effects (one department must wait for, or change its work because of, another);
+  never add generic links such as "monitoring must remain active".
 - conflicts: where specialists disagree with each other or with the plan. Leave empty if they agree.
 - If any specialist OPPOSES the plan, the summary must start with that objection, and the headline must
   not present the plan as settled."""
@@ -314,6 +330,7 @@ _CAUSE_RE = re.compile(
     re.IGNORECASE,
 )
 _PAST_RE = re.compile(r"\b(?:past|previous(?:ly)?|precedent|earlier|historical(?:ly)?|history|last time|incident report|KB-INC-\w+)\b", re.IGNORECASE)
+_BREAKDOWN_RE = re.compile(r"\b(?:down|downtime|outage|fail(?:ed|ure|s)?|fault|breakdown|broke|stopped|stoppage|jam(?:med)?|unavailable)\b", re.IGNORECASE)
 _CAUSE_STOPWORDS = {"this", "that", "with", "from", "into", "machine", "current", "recent", "expected", "planned"}
 
 
@@ -328,7 +345,10 @@ def find_unsupported_causes(texts: List[str], reported_text: str) -> List[str]:
     for text in texts:
         # Sentences that are explicitly about the past ("a past incident on M17 was due to …") are allowed:
         # citing a precedent is fine, presenting it as today's cause is not
-        current = " ".join(s for s in re.split(r"(?<=[.!?])\s+", text or "") if not _PAST_RE.search(s))
+        # Only sentences about the breakdown itself can state its cause ("triggered by keeping the work" is not one)
+        current = " ".join(
+            s for s in re.split(r"(?<=[.!?])\s+", text or "") if not _PAST_RE.search(s) and _BREAKDOWN_RE.search(s)
+        )
         for m in _CAUSE_RE.finditer(current):
             phrase = m.group(1).strip()
             words = [w for w in re.findall(r"[a-z]{4,}", phrase.lower()) if w not in _CAUSE_STOPWORDS]
