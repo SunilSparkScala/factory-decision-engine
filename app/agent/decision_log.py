@@ -3,16 +3,20 @@ Append-only audit log of human-approved decisions, separate from the factory dat
 which stays immutable.
 
 Storage:
-- FDE_LOG_BUCKET set (Cloud Run): one JSON object in Cloud Storage, so the log survives
+- FDE_LOG_FIRESTORE set (Cloud Run): one Firestore document per approved decision in that
+  collection, read newest first. If FDE_LOG_BUCKET is also set, Cloud Storage keeps a backup copy.
+- FDE_LOG_BUCKET set: one JSON object in Cloud Storage, so the log survives
   restarts and is shared by all instances. Writes use a generation precondition, so two
   instances approving at the same moment can't overwrite each other's entries.
 - Otherwise: in memory, mirrored to data/generated/decision_log.json (best effort).
+Each store falls back to the next one if it fails, so an approval is never lost.
 """
 import json
 import logging
 import os
 import sqlite3
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -26,6 +30,7 @@ LOG_OBJECT = os.environ.get("FDE_LOG_OBJECT", "decision_log.json")
 _lock = threading.Lock()
 _entries: Optional[List[Dict[str, Any]]] = None
 _bucket = None
+_firestore = None
 
 
 def _audit_db_path() -> Path:
@@ -65,6 +70,38 @@ def _get_bucket():
         from google.cloud import storage
         _bucket = storage.Client().bucket(_bucket_name())
     return _bucket
+
+
+def _collection_name() -> str:
+    return os.environ.get("FDE_LOG_FIRESTORE", "").strip()
+
+
+def _get_collection():
+    global _firestore
+    if _firestore is None:
+        from google.cloud import firestore
+        _firestore = firestore.Client(database=os.environ.get("FDE_FIRESTORE_DATABASE", "(default)"))
+    return _firestore.collection(_collection_name())
+
+
+def _record_firestore(entry: Dict[str, Any]) -> None:
+    """One document per decision. The full entry is kept as JSON text (Firestore can't store
+    nested lists); a few plain fields sit beside it so the log is readable in the console."""
+    doc = {
+        "decision_id": entry["decision_id"],
+        "logged_at": time.time(),
+        "entry_json": json.dumps(entry, default=str),
+    }
+    for key in ("approved_by", "approver", "machine_id", "plan_id", "cost_impact_usd", "domain"):
+        if isinstance(entry.get(key), (str, int, float)):
+            doc[key] = entry[key]
+    _get_collection().document(entry["decision_id"]).set(doc)
+
+
+def _read_firestore(limit: int) -> List[Dict[str, Any]]:
+    from google.cloud import firestore
+    query = _get_collection().order_by("logged_at", direction=firestore.Query.DESCENDING).limit(limit)
+    return [json.loads(d.to_dict()["entry_json"]) for d in query.stream()]
 
 
 def _read_remote() -> Tuple[List[Dict[str, Any]], int]:
@@ -167,6 +204,17 @@ def record(entry: Dict[str, Any]) -> Dict[str, Any]:
 
         # Update in-memory and JSON file mirror
         _load().insert(0, full_entry)
+        if _collection_name():
+            try:
+                _record_firestore(full_entry)
+                if _bucket_name():
+                    try:
+                        _record_remote(full_entry)  # backup copy
+                    except Exception as e:
+                        logger.warning(f"Could not write the Cloud Storage backup of the decision log: {e}")
+                return full_entry
+            except Exception as e:
+                logger.warning(f"Could not write decision log to Firestore, using the next store: {e}")
         if _bucket_name():
             try:
                 _record_remote(full_entry)
@@ -183,6 +231,11 @@ def record(entry: Dict[str, Any]) -> Dict[str, Any]:
 
 def list_entries(limit: int = 50) -> List[Dict[str, Any]]:
     with _lock:
+        if _collection_name():
+            try:
+                return _read_firestore(limit)
+            except Exception as e:
+                logger.warning(f"Could not read decision log from Firestore, using the next store: {e}")
         if _bucket_name():
             try:
                 return _read_remote()[0][:limit]

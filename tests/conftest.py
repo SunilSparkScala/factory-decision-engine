@@ -43,3 +43,4 @@ def _isolated_decision_log(tmp_path, monkeypatch):
     monkeypatch.setattr(decision_log, "LOG_PATH", tmp_path / "decision_log.json")
     monkeypatch.setattr(decision_log, "_entries", None)
     monkeypatch.delenv("FDE_LOG_BUCKET", raising=False)
+    monkeypatch.delenv("FDE_LOG_FIRESTORE", raising=False)
