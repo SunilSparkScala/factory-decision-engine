@@ -16,17 +16,18 @@ from datetime import timedelta
 from typing import Any, Dict, Optional
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from app.agent.agent import FactoryDecisionAgent
 from app.agent.assistant import generate_action_documents
 from app.agent import decision_log
 from app.agent.schemas import DecisionResponse
-from app.ai.llm import model_for, vertex_enabled
+from app.ai.llm import GeminiService, model_for, vertex_enabled
 from app.config import config
 from app import domains
 from app.domains.packs import PACKS
@@ -277,6 +278,52 @@ def ask_about_decision(req: AskRequest):
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
     return agent.ask(req.question.strip(), req.decision)
+
+# Voice notes: a report is a sentence or two. The browser stops recording at 60 s; 5 MB covers
+# 60 s of WAV and far more of WebM/Ogg, so anything larger is not a voice note.
+MAX_AUDIO_BYTES = 5 * 1024 * 1024
+AUDIO_TYPES = {"audio/webm", "audio/ogg", "audio/wav", "audio/mp4", "audio/mpeg", "audio/aac", "audio/flac"}
+AUDIO_TYPE_ALIASES = {"audio/x-wav": "audio/wav", "audio/wave": "audio/wav", "audio/vnd.wave": "audio/wav",
+                      "audio/mp3": "audio/mpeg", "audio/x-m4a": "audio/mp4", "audio/m4a": "audio/mp4",
+                      "video/webm": "audio/webm"}
+_transcriber: Optional[GeminiService] = None
+
+
+@app.post("/api/transcribe")
+async def transcribe_voice_note(request: Request):
+    """
+    Gemini listens to a recorded voice note (the raw audio is the request body, with its
+    Content-Type, e.g. audio/webm from the browser's MediaRecorder) and returns the text.
+    The raw body avoids a multipart dependency. Errors are clear so the UI can fall back to
+    the browser's own speech recognition.
+    """
+    global _transcriber
+    mime = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    mime = AUDIO_TYPE_ALIASES.get(mime, mime)
+    if mime not in AUDIO_TYPES:
+        raise HTTPException(status_code=415, detail="Send the recording as WebM, Ogg, WAV, MP4 or MP3 audio.")
+    too_large = HTTPException(status_code=413, detail="The recording is too long. Keep voice notes under a minute.")
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_AUDIO_BYTES:
+        raise too_large
+    audio = bytearray()
+    async for chunk in request.stream():
+        audio += chunk
+        if len(audio) > MAX_AUDIO_BYTES:
+            raise too_large
+    if not audio:
+        raise HTTPException(status_code=400, detail="The recording is empty.")
+
+    if _transcriber is None:
+        _transcriber = GeminiService(model=model_for("assistant"))
+    if not _transcriber.available:
+        raise HTTPException(status_code=503, detail="Gemini is not set up on this server, so it cannot transcribe.")
+    # The Gemini call blocks, so it runs in a worker thread like the synchronous endpoints
+    text = await run_in_threadpool(_transcriber.transcribe_audio, bytes(audio), mime)
+    if text is None:
+        raise HTTPException(status_code=502, detail="Gemini could not transcribe the recording right now.")
+    return {"text": text, "source": "gemini", "model": _transcriber.last_model}
+
 
 @app.post("/api/approve")
 def approve_decision(req: ApproveRequest):

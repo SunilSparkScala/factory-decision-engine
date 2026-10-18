@@ -2199,3 +2199,8 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .mic-btn.is-listening { animation: none; }
 }
+/* Who transcribed the words: Gemini (from the recording) or the browser (fallback) */
+.voice-note { font-size: 11.5px; color: var(--text-3); margin-top: 4px; line-height: 1.4; }
+.voice-note.is-gemini { color: var(--primary); font-weight: 600; }
+.voice-note[hidden] { display: none; }
+.cockpit-quick-report + .voice-note { margin: -8px 18px 12px; }

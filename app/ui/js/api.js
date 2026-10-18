@@ -43,7 +43,17 @@ async function request(method, url, body) {
   return data;
 }
 
+/** Send a recorded voice note (raw audio body) for Gemini to transcribe. Errors carry the HTTP status. */
+async function transcribe(blob) {
+  const res = await fetch("/api/transcribe", { method: "POST", headers: { "Content-Type": blob.type || "audio/webm" }, body: blob });
+  let data = null;
+  try { data = await res.json(); } catch { /* non-JSON error */ }
+  if (!res.ok) throw Object.assign(new Error((data && data.detail) || `Transcription failed (${res.status})`), { status: res.status });
+  return data;
+}
+
 export const api = {
+  transcribe,
   health: () => request("GET", "/api/health"),
   domains: () => request("GET", "/api/domains"),
   overview: () => request("GET", "/api/factory/overview"),

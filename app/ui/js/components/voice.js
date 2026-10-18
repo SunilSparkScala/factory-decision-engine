@@ -1,18 +1,30 @@
 // Voice for plant managers on the floor: speak a report or a question (🎤) and hear the
-// recommendation (🔊). Uses the browser's own speech features (Web Speech API).
+// recommendation (🔊).
+// Input: the recording goes to Gemini on the server (/api/transcribe), which understands
+// machine IDs, numbers and factory noise better; if that is unavailable or fails, the
+// browser's own speech recognition (Web Speech API) takes over. Output: browser speech.
 // Spoken text only fills the box; the manager checks it and presses Analyze/Ask themselves.
 
 import { h, toast } from "../dom.js";
+import { api } from "../api.js";
+import { state } from "../state.js";
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const LANG = "en-IN"; // Indian English: plant names, accents and number words come out right
 const MAX_LISTEN_MS = 60_000; // a report is a sentence or two; never leave the mic open by mistake
 
-export const canListen = Boolean(Recognition);
+const canRecord = Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+export const canListen = canRecord || Boolean(Recognition);
 export const canSpeak = typeof window.speechSynthesis !== "undefined" && typeof window.SpeechSynthesisUtterance !== "undefined";
 
 // Only one microphone session at a time, across all boxes
 let session = null;
+// Set when the server says Gemini is not set up, so later clicks go straight to the browser
+let geminiOff = false;
+
+function useGemini() {
+  return canRecord && !geminiOff && state.health?.live_gemini_available !== false;
+}
 
 // ------------------------------------------------------------------ voice input
 
@@ -39,16 +51,52 @@ export function attachMic(input, { before = null, label = "Speak instead of typi
   }
   btn.addEventListener("click", () => {
     if (session?.btn === btn) session.stop();
+    else if (useGemini()) record(input, btn);
     else listen(input, btn);
   });
+  // The "Transcribed by …" label belongs to the words it describes: it goes when they are sent or erased
+  input.form?.addEventListener("submit", () => showNote(input, null));
+  input.addEventListener("input", () => { if (!input.value.trim()) showNote(input, null); });
   return btn;
 }
 
+const MIC_LABELS = {
+  listening: ["Listening…", " click to stop"],
+  working: ["Gemini is transcribing…", ""],
+  idle: ["", ""],
+};
+
 function setMicState(btn, mode) {
   btn.classList.toggle("is-listening", mode === "listening");
+  btn.classList.toggle("is-working", mode === "working");
   btn.setAttribute("aria-pressed", mode === "listening" ? "true" : "false");
-  btn.querySelector(".mic-text").textContent = mode === "listening" ? "Listening…" : "";
-  btn.querySelector(".mic-hint").textContent = mode === "listening" ? " click to stop" : "";
+  btn.setAttribute("aria-busy", mode === "working" ? "true" : "false");
+  const [text, hint] = MIC_LABELS[mode];
+  btn.querySelector(".mic-text").textContent = text;
+  btn.querySelector(".mic-hint").textContent = hint;
+}
+
+// One small honest label under each box: who turned the speech into text
+const notes = new WeakMap();
+
+function showNote(input, source) {
+  let note = notes.get(input);
+  if (!source) { if (note) note.hidden = true; return; }
+  if (!note) {
+    note = h("div", { class: "voice-note", role: "status" });
+    (input.form || input.closest(".mic-field") || input).insertAdjacentElement("afterend", note);
+    notes.set(input, note);
+  }
+  note.classList.toggle("is-gemini", source === "gemini");
+  note.textContent = source === "gemini"
+    ? "✦ Transcribed by Gemini. Check the words, then send."
+    : "Transcribed by the browser. Check the words, then send.";
+  note.hidden = false;
+}
+
+/** Put recognised words in the box after anything already typed (e.g. "M17 will be down for "). */
+function fill(input, base, words) {
+  input.value = base + (base ? words.replace(/\s+/g, " ").trim() : tidy(words));
 }
 
 function stopSession() {
@@ -76,14 +124,17 @@ function listen(input, btn) {
   let heard = "";
   let timer = null;
 
+  showNote(input, null);
+
   const done = () => {
     clearTimeout(timer);
     if (session?.rec === rec) session = null;
     setMicState(btn, "idle");
     if (heard.trim()) {
-      input.value = base + tidy(heard);
+      fill(input, base, heard);
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.focus();
+      showNote(input, "browser");
     }
   };
 
@@ -95,7 +146,7 @@ function listen(input, btn) {
       else interim += ` ${e.results[i][0].transcript}`;
     }
     heard = finalText + interim;
-    input.value = base + tidy(heard);
+    fill(input, base, heard);
     input.scrollLeft = input.scrollWidth; // a one-line box shows the newest words
   };
   rec.onerror = (e) => {
@@ -112,6 +163,75 @@ function listen(input, btn) {
   session = { btn, rec, stop: () => rec.stop() };
   setMicState(btn, "listening");
   timer = setTimeout(() => rec.stop(), MAX_LISTEN_MS);
+}
+
+/** Record a voice note, then Gemini transcribes it; on any failure the browser listens instead. */
+async function record(input, btn) {
+  stopSession();
+  showNote(input, null);
+  const fallBack = (message) => {
+    setMicState(btn, "idle");
+    if (session?.btn === btn) session = null;
+    if (!Recognition) { toast(`${message} Please type instead.`, { error: true }); return; }
+    toast(`${message} Please say it again: the browser is listening now.`);
+    listen(input, btn);
+  };
+
+  // Placeholder session while the browser asks for the microphone, so a second click does nothing
+  session = { btn, stop: () => {} };
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (e) {
+    session = null;
+    setMicState(btn, "idle");
+    if (e.name === "NotAllowedError" || e.name === "SecurityError") toast(MIC_ERRORS["not-allowed"], { error: true });
+    else if (e.name === "NotFoundError") toast(MIC_ERRORS["audio-capture"], { error: true });
+    else fallBack("Recording could not start.");
+    return;
+  }
+  const type = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm", "audio/mp4"]
+    .find((t) => MediaRecorder.isTypeSupported?.(t));
+  let rec;
+  try {
+    rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  } catch {
+    stream.getTracks().forEach((t) => t.stop());
+    fallBack("Recording is not supported here.");
+    return;
+  }
+
+  const base = input.value.trim() ? `${input.value.trimEnd()} ` : "";
+  const chunks = [];
+  let timer = null;
+  rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+  rec.onstop = async () => {
+    clearTimeout(timer);
+    stream.getTracks().forEach((t) => t.stop()); // release the mic (the browser's red dot goes away)
+    const blob = new Blob(chunks, { type: (rec.mimeType || type || "audio/webm").split(";")[0] });
+    if (!blob.size) { fallBack("Nothing was recorded."); return; }
+    setMicState(btn, "working");
+    session = { btn, stop: () => {} }; // transcribing: clicks wait for the result
+    try {
+      const res = await api.transcribe(blob);
+      session = null;
+      setMicState(btn, "idle");
+      if (!res.text) { toast(MIC_ERRORS["no-speech"]); return; }
+      fill(input, base, res.text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus();
+      showNote(input, "gemini");
+    } catch (err) {
+      if (err.status === 503) geminiOff = true;
+      if (err.status === 413) { session = null; setMicState(btn, "idle"); toast(err.message, { error: true }); return; }
+      fallBack("Gemini couldn't transcribe that.");
+    }
+  };
+
+  rec.start();
+  session = { btn, stop: () => { if (rec.state !== "inactive") rec.stop(); } };
+  setMicState(btn, "listening");
+  timer = setTimeout(() => { if (rec.state !== "inactive") rec.stop(); }, MAX_LISTEN_MS);
 }
 
 function tidy(text) {

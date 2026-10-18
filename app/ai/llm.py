@@ -139,7 +139,7 @@ class GeminiService:
                     self._client = genai.Client(api_key=self.api_key, http_options=http_options)
             return self._client
 
-    def _generate(self, prompt: str, system: Optional[str], schema: Optional[Type[BaseModel]], temperature: float):
+    def _generate(self, prompt: Any, system: Optional[str], schema: Optional[Type[BaseModel]], temperature: float):
         """Call Gemini, moving down the model chain on rate-limit or overload errors."""
         from google.genai import types
 
@@ -205,6 +205,42 @@ class GeminiService:
             self.last_error = f"{type(e).__name__}: {e}"
             logger.warning(f"Gemini text generation failed: {self.last_error}")
             return None
+
+
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> Optional[str]:
+        """
+        Gemini listens to a recorded voice note and returns what was said as clean text:
+        "" when there was no speech, None on any failure (the UI then uses browser speech).
+        """
+        if not self.available:
+            self.last_error = "No Gemini API key configured."
+            return None
+        try:
+            from google.genai import types
+
+            contents = [types.Part.from_bytes(data=audio, mime_type=mime_type), TRANSCRIBE_INSTRUCTION]
+            resp = self._generate(contents, None, None, 0.0)
+            text = (resp.text or "").strip().strip('"“”').strip()
+            text = re.sub(r"^(transcript(ion)?|text)\s*:\s*", "", text, flags=re.IGNORECASE)
+            return "" if not text or NO_SPEECH in text else text
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
+            logger.warning(f"Gemini transcription failed: {self.last_error}")
+            return None
+
+
+NO_SPEECH = "NO_SPEECH"
+TRANSCRIBE_INSTRUCTION = (
+    "This recording is a short voice note from a factory plant manager reporting a machine "
+    "disruption or asking about a recovery plan. Transcribe what they said as clean, readable "
+    "English text.\n"
+    "- Keep machine IDs exactly, written as a capital letter and digits (\"em seventeen\" -> M17), "
+    "and keep line, station and product names as spoken (Line B, station B2).\n"
+    "- Write numbers as digits and keep units exact (\"six hours\" -> 6 hours, \"twenty percent\" -> 20%).\n"
+    "- Ignore background machine noise and drop filler words (um, uh), false starts and repeats.\n"
+    "- Do not answer, summarise, translate or add anything; output only the transcript, no quotes.\n"
+    f"- If there is no intelligible speech, output exactly {NO_SPEECH}."
+)
 
 
 def compact_json(data: Any, limit: int = 12_000) -> str:
