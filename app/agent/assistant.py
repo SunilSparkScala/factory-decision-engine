@@ -110,7 +110,7 @@ def answer_question(llm: Optional[GeminiService], question: str, decision, histo
             valid = {e["id"] for e in evidence}
             # Earlier answers were checked when they were given, so their figures count as known
             ungrounded = find_ungrounded_numbers(
-                [res.answer], compact_json(context, 50_000) + compact_json(evidence, 50_000) + format_history(history)
+                [res.answer], compact_json(context, 50_000) + compact_json(evidence, 50_000) + format_history(history) + question
             )
             return {
                 "answer": res.answer,
@@ -158,7 +158,9 @@ def generate_action_documents(
     # What the approver signed up to: the specialists' conditions and the Decision Lead's next steps
     conditions = _specialist_conditions(decision)
     context["specialist_conditions"] = conditions
-    context["decision_lead_next_steps"] = (decision.decision_brief or {}).get("next_steps") or []
+    context["decision_lead_next_steps"] = [
+        s for s in ((decision.decision_brief or {}).get("next_steps") or []) if not _APPROVAL_STEP.search(s)
+    ]
     evidence = _evidence_list(decision)
     approved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -178,6 +180,7 @@ def generate_action_documents(
         )
         if res is not None:
             docs = {k: readable_codes(v) for k, v in res.model_dump().items()}
+            docs["supervisor_work_order"] = drop_approval_steps(docs["supervisor_work_order"])
             source = "gemini"
 
     if docs is None:
@@ -213,6 +216,23 @@ def _specialist_conditions(decision) -> List[Dict[str, str]]:
 _STATION_RE = re.compile(r"\bSTA_([A-Z])(\d)\b")
 _LINE_RE = re.compile(r"\bLINE_([A-Z])\b")
 _PLAN_RE = re.compile(r"\s*\(?\b(?:under |plan )?PLAN_[A-Z]+_\d+\b\)?")
+
+
+_APPROVAL_STEP = re.compile(r"\b(?:approve|approval|sign[- ]off on the plan)\b", re.IGNORECASE)
+_STEP_RE = re.compile(r"(?:^|\s)(\d{1,2})\.\s")
+
+
+def drop_approval_steps(text: str) -> str:
+    """The plan is already approved when the work order is written: remove 'review and approve' steps, renumber."""
+    parts = [p.strip() for p in _STEP_RE.split(text or "")]
+    if len(parts) < 3:  # not a numbered list
+        return text
+    intro, steps = parts[0], [parts[i + 1] for i in range(1, len(parts) - 1, 2)]
+    kept = [s for s in steps if s and not (_APPROVAL_STEP.search(s) and not re.search(r"sign-off is complete|signed off", s, re.I))]
+    if not kept:
+        return text
+    body = "\n".join(f"{i}. {s}" for i, s in enumerate(kept, start=1))
+    return f"{intro}\n{body}".strip() if intro else body
 
 
 def readable_codes(text: str) -> str:

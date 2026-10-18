@@ -232,7 +232,11 @@ class FactoryDecisionAgent:
         if not answer:
             raise RuntimeError("Agent returned no answer")
 
-        grounding_text = compact_json(context, 50_000) + json.dumps(evidence, default=str, ensure_ascii=False) + json.dumps(tool_responses, default=str, ensure_ascii=False)
+        # Numbers the manager typed (this question and earlier ones) are theirs, not the AI's invention
+        grounding_text = (
+            compact_json(context, 50_000) + json.dumps(evidence, default=str, ensure_ascii=False)
+            + json.dumps(tool_responses, default=str, ensure_ascii=False) + question + format_history(history)
+        )
         known_docs = {e["id"] for e in evidence}
         for resp_val in tool_responses:
             if isinstance(resp_val, dict):

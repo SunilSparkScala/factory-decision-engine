@@ -589,3 +589,17 @@ def test_approval_documents_carry_the_conditions_and_are_checked():
     assert pack["conditions"] == [{"specialist": "Quality", "condition": "First Article Inspection on M26 before volume."}]
     assert "STA_C1" not in pack["documents"]["supervisor_work_order"] and "PLAN_TRANSFER_07" not in pack["documents"]["supervisor_work_order"]
     assert pack["grounding_check"]["passed"] is False and "999" in pack["grounding_check"]["ungrounded_numbers"]
+
+
+def test_work_order_drops_approval_steps_and_numbers_typed_by_the_manager_are_known():
+    from app.agent.assistant import drop_approval_steps, format_history
+    from app.agent.specialists import find_ungrounded_numbers
+
+    wo = ("1. Review and approve the recommended transfer. 2. Calibrate M26. "
+          "3. Perform the First Article Inspection. 4. Start volume once inspection sign-off is complete.")
+    out = drop_approval_steps(wo)
+    assert "approve" not in out.lower() and out.splitlines()[0] == "1. Calibrate M26."
+    assert out.splitlines()[-1].startswith("3. Start volume")
+    # "$50" came from the manager's question, so the answer may repeat it
+    question = "Can we keep the cost within $50?"
+    assert find_ungrounded_numbers(["Keeping costs under $50 is not feasible."], "cost 100" + question) == []

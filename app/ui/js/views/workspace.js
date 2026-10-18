@@ -715,7 +715,7 @@ function renderRecommendation(d) {
     const nums = brief.grounding_check.ungrounded_numbers || [];
     const causes = brief.grounding_check.unsupported_causes || [];
     grounding.textContent = ok ? "✓ All AI numbers traced to engine data"
-      : nums.length ? `⚠ ${nums.length} AI number(s) not found in engine data` : "⚠ AI stated a cause that was not reported";
+      : nums.length ? `⚠ Check: ${nums.length === 1 ? "1 number" : `${nums.length} numbers`} not in the plant data` : "⚠ AI stated a cause that was not reported";
     grounding.title = ok ? "Every number the AI wrote appears in the deterministic engine output or the cited documents, and it states no cause that was not reported."
       : [nums.length ? `Unverified numbers: ${nums.join(", ")}` : null, causes.length ? `Cause not in the report: ${causes.join("; ")}` : null].filter(Boolean).join("\n");
   } else {
@@ -1054,13 +1054,28 @@ function renderEvidence(d) {
 }
 
 /** "Agent ran: simulate_machine_failure → evaluate_recovery_plans": the tools the ADK agent chose. */
+/** What a tool call did, in plain words ("simulated M26 down for 8 h"); the raw call is on hover. */
+function toolStep(t) {
+  const a = t.args || {};
+  const hrs = a.downtime_hours != null ? ` for ${num(a.downtime_hours, 0)} h` : "";
+  switch (t.tool) {
+    case "simulate_machine_failure": return `simulated ${a.machine_id || "a machine"} down${hrs}`;
+    case "generate_recovery_plans": return `listed the recovery options${a.machine_id ? ` for ${a.machine_id}` : ""}`;
+    case "evaluate_recovery_plans": return "compared the recovery plans";
+    case "search_engineering_knowledge": return "searched the plant documents";
+    case "get_machine_status": return `checked ${a.machine_id || "a machine"}'s status`;
+    case "get_factory_state": return "checked the plant status";
+    default: return humanize(t.tool);
+  }
+}
+
 function toolTrace(tools) {
   const items = [];
   tools.forEach((t, i) => {
     if (i) items.push(h("span", { class: "arrow", "aria-hidden": "true" }, "→"));
-    items.push(h("span", { class: "tool", title: JSON.stringify(t.args) }, t.tool));
+    items.push(h("span", { class: "tool", title: `${t.tool}(${JSON.stringify(t.args)})` }, toolStep(t)));
   });
-  return h("div", { class: "trace" }, h("span", { class: "fine-print" }, "Agent ran: "), items);
+  return h("div", { class: "trace" }, h("span", { class: "fine-print" }, "⚙ The agent ran new calculations: "), items);
 }
 
 function renderDetails(d) {
@@ -1142,7 +1157,7 @@ async function ask(question) {
       res.tools_used?.length ? toolTrace(res.tools_used) : null,
       res.citations?.length ? h("div", { class: "cite-row" }, res.citations.map(citeButton)) : null,
       res.grounding_check && !res.grounding_check.passed
-        ? h("div", { class: "fine-print warn-text" }, `⚠ Not found in engine data: ${res.grounding_check.ungrounded_numbers.join(", ")}`)
+        ? h("div", { class: "fine-print warn-text" }, `⚠ Check this answer: ${res.grounding_check.ungrounded_numbers.join(", ")} ${res.grounding_check.ungrounded_numbers.length === 1 ? "does" : "do"} not appear in the plant data.`)
         : null,
       res.source === "rules" ? h("div", { class: "fine-print" }, "Rule-based answer (AI unavailable).") : null));
   } catch (e) {
@@ -1239,14 +1254,14 @@ function docLines(text) {
 
 export function documentTabs(docs) {
   const tabs = [
-    ["supervisor_work_order", "Supervisor work order"],
-    ["quality_notice", "Quality notice"],
-    ["revised_schedule_summary", "Schedule changes"],
-    ["customer_message", "Customer update"],
+    ["supervisor_work_order", "Supervisor work order", "For the shift supervisor: the steps to carry out, in order"],
+    ["quality_notice", "Quality notice", "For the quality team: inspections and holds required"],
+    ["revised_schedule_summary", "Schedule changes", "For production planning: what changes for each affected order"],
+    ["customer_message", "Customer update", "For the account manager to send to the customer"],
   ];
   const panel = h("div", { class: "doc-panel", role: "tabpanel" });
-  const buttons = tabs.map(([key, label], i) => h("button", {
-    class: "doc-tab", role: "tab", "aria-selected": String(i === 0),
+  const buttons = tabs.map(([key, label, tip], i) => h("button", {
+    class: "doc-tab", role: "tab", "aria-selected": String(i === 0), title: tip,
     onclick: (ev) => {
       buttons.forEach((b) => b.setAttribute("aria-selected", "false"));
       ev.currentTarget.setAttribute("aria-selected", "true");
@@ -1257,7 +1272,9 @@ export function documentTabs(docs) {
     h("button", { class: "btn btn-secondary btn-sm doc-copy", onclick: () => copyText(docLines(docs[key])) }, "Copy"),
     docLines(docs[key]) || "—");
   show(tabs[0][0]);
-  return h("div", {}, h("div", { class: "doc-tabs", role: "tablist" }, buttons), panel);
+  return h("div", {},
+    h("p", { class: "doc-intro" }, "Drafted by Gemini for each team: what the supervisor does, what quality checks, what changes per order, and a message for the customer."),
+    h("div", { class: "doc-tabs", role: "tablist" }, buttons), panel);
 }
 
 function renderApproval(entry) {
