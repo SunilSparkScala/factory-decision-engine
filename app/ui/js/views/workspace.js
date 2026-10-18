@@ -919,21 +919,64 @@ function loadDocIndex() {
   return docIndexLoading;
 }
 
+function shortTitle(title, max = 42) {
+  return title.length > max ? `${title.slice(0, max - 1).trimEnd()}…` : title;
+}
+
+/** A source chip: the document code plus a short name; clicking opens its excerpt right under the card. */
 function citeButton(id) {
   const doc = docIndex?.[id];
   return h("button", {
     class: "cite",
-    title: doc ? `${id} · ${doc.title} (click to show)` : `Show ${id}`,
-    onclick: () => {
-      const card = document.getElementById(`ev-${id}`);
-      if (!card) return;
-      $("#evidence-disclosure").open = true;
-      card.scrollIntoView({ behavior: "smooth", block: "center" });
-      card.classList.remove("flash");
-      void card.offsetWidth;
-      card.classList.add("flash");
-    },
-  }, id);
+    title: doc ? `${id} · ${doc.title} (click to read the excerpt)` : `Show ${id}`,
+    "aria-expanded": "false",
+    onclick: (e) => toggleSourcePreview(e.currentTarget, id),
+  }, h("span", { class: "cite-id" }, `📄 ${id}`), doc ? h("span", { class: "cite-name" }, ` · ${shortTitle(doc.title)}`) : null);
+}
+
+function toggleSourcePreview(btn, id) {
+  const row = btn.closest(".cite-row");
+  if (!row) { jumpToEvidence(id); return; }
+  const open = row.nextElementSibling?.classList.contains("cite-preview") ? row.nextElementSibling : null;
+  const sameDoc = open?.dataset.doc === id;
+  row.querySelectorAll(".cite").forEach((b) => b.setAttribute("aria-expanded", "false"));
+  open?.remove();
+  if (sameDoc) return; // a second click closes it
+  const doc = docIndex?.[id];
+  const ev = state.decision?.engineering_evidence?.find((e) => e.document_id === id);
+  const excerpt = readableExcerpt(ev?.excerpt || doc?.excerpt);
+  row.after(h("div", { class: "cite-preview", "data-doc": id },
+    h("div", { class: "cite-preview-title" }, `${id} · ${doc?.title || ev?.title || ""}`),
+    excerpt ? h("blockquote", {}, `“${excerpt}”`) : null,
+    h("button", { class: "link-btn", onclick: () => jumpToEvidence(id) }, "Show in Engineering Evidence ↓")));
+  btn.setAttribute("aria-expanded", "true");
+}
+
+/** Document text without markdown headings or markers, cut at a sentence end (about 320 characters). */
+function readableExcerpt(text) {
+  if (!text) return "";
+  const plain = text.split(String.fromCharCode(10))
+    .filter((line) => !line.trim().startsWith("#"))
+    .join(" ")
+    .replace(/[*_`>]+/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s\d+\.$/, "") // a dangling list number at the end of the excerpt
+    .trim();
+  const truncated = /(\.\.\.|…)$/.test(plain);
+  if (plain.length <= 320 && !truncated) return plain;
+  const cut = plain.slice(0, 320);
+  const end = cut.lastIndexOf(". ");
+  return end > 120 ? cut.slice(0, end + 1).replace(/\s\d+\.$/, "") : `${cut.trimEnd()}…`;
+}
+
+function jumpToEvidence(id) {
+  const card = document.getElementById(`ev-${id}`);
+  if (!card) return;
+  $("#evidence-disclosure").open = true;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.remove("flash");
+  void card.offsetWidth;
+  card.classList.add("flash");
 }
 
 function renderEvidence(d) {

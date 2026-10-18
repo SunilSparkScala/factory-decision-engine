@@ -2121,6 +2121,12 @@ button { cursor: pointer; }
 .fig[title]:not([title=""]) { cursor: help; }
 .lead-note { font-weight: 500; color: var(--text-3); text-transform: none; letter-spacing: 0; }
 .cite-label { font-size: 11px; color: var(--text-3); font-weight: 600; margin-right: 2px; align-self: center; }
+.cite { text-align: left; cursor: pointer; }
+.cite .cite-name { font-family: var(--font); font-weight: 500; color: var(--text-2); }
+.cite[aria-expanded="true"] { border-color: var(--primary); background: var(--primary-soft); }
+.cite-preview { margin-top: 8px; padding: 10px 12px; border-left: 3px solid var(--primary); background: var(--surface-2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 12px; }
+.cite-preview-title { font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.cite-preview blockquote { margin: 0 0 6px; color: var(--text-2); line-height: 1.5; }
 
 /* Recommendation column before the first analysis */
 .rail-placeholder {
