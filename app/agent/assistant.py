@@ -53,7 +53,25 @@ def _plan_label(decision) -> str:
     return sp.description if sp else "No feasible plan"
 
 
-def answer_question(llm: Optional[GeminiService], question: str, decision) -> Dict[str, Any]:
+MAX_HISTORY_TURNS = 3
+
+
+def format_history(history: Optional[List[Dict[str, str]]]) -> str:
+    """The last few questions and answers, so follow-ups like 'and what would that cost?' make sense."""
+    turns = [t for t in (history or []) if (t.get("question") or "").strip()][-MAX_HISTORY_TURNS:]
+    if not turns:
+        return ""
+    lines = [
+        "EARLIER IN THIS CONVERSATION (oldest first; use it only to understand follow-up questions such as "
+        "'that', 'it' or 'instead'; every figure in your answer must still come from the data or tool results):"
+    ]
+    for t in turns:
+        lines.append(f"Q: {t['question'].strip()[:300]}")
+        lines.append(f"A: {(t.get('answer') or '').strip()[:800]}")
+    return "\n".join(lines) + "\n\n"
+
+
+def answer_question(llm: Optional[GeminiService], question: str, decision, history=None) -> Dict[str, Any]:
     """Answer a question about the current decision, grounded in its data."""
     context = build_decision_context(decision, decision.robustness)
     evidence = _evidence_list(decision)
@@ -67,7 +85,7 @@ def answer_question(llm: Optional[GeminiService], question: str, decision) -> Di
     if llm is not None and llm.available:
         prompt = (
             f"DECISION DATA:\n{compact_json(context)}\n\nEVIDENCE:\n{compact_json(evidence, 5000)}\n\n"
-            f"QUESTION FROM PLANT MANAGER:\n{question}"
+            f"{format_history(history)}QUESTION FROM PLANT MANAGER:\n{question}"
         )
         res = llm.generate_json(
             prompt, GroundedAnswer,
@@ -76,7 +94,10 @@ def answer_question(llm: Optional[GeminiService], question: str, decision) -> Di
         )
         if res is not None:
             valid = {e["id"] for e in evidence}
-            ungrounded = find_ungrounded_numbers([res.answer], compact_json(context, 50_000) + compact_json(evidence, 50_000))
+            # Earlier answers were checked when they were given, so their figures count as known
+            ungrounded = find_ungrounded_numbers(
+                [res.answer], compact_json(context, 50_000) + compact_json(evidence, 50_000) + format_history(history)
+            )
             return {
                 "answer": res.answer,
                 "citations": [c for c in res.citations if c in valid],

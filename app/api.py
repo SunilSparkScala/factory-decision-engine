@@ -13,7 +13,7 @@ import logging
 import threading
 from collections import Counter
 from datetime import timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -118,6 +118,9 @@ class WhatIfRequest(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(..., description="Question about the current decision")
     decision: DecisionResponse = Field(..., description="Decision the question refers to")
+    history: List[Dict[str, str]] = Field(
+        default_factory=list, description="Earlier questions and answers about this decision ({question, answer}), oldest first"
+    )
 
 class ApproveRequest(BaseModel):
     decision: DecisionResponse = Field(..., description="Decision being approved")
@@ -277,7 +280,7 @@ def ask_about_decision(req: AskRequest):
     """Grounded Q&A about a decision ('Why not overtime?', 'Explain this to my CEO')."""
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
-    return agent.ask(req.question.strip(), req.decision)
+    return agent.ask(req.question.strip(), req.decision, history=req.history)
 
 # Voice notes: a report is a sentence or two. The browser stops recording at 60 s; 5 MB covers
 # 60 s of WAV and far more of WebM/Ogg, so anything larger is not a voice note.

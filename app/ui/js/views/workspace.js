@@ -21,6 +21,8 @@ let busy = false;
 let analysisSeq = 0;
 // What the last priority change did to the recommendation ({ changed, from }), shown on the card
 let priorityChange = null;
+// The last few questions and answers about the plan on screen, so follow-ups make sense
+let chatHistory = [];
 let currentIncidentContext = null;
 
 export function init(context) {
@@ -59,9 +61,11 @@ export function init(context) {
     e.preventDefault();
     ask($("#ask-input").value);
   });
-  for (const chip of $$("#ask-card .chip-btn")) {
-    chip.addEventListener("click", () => ask(chip.dataset.question));
-  }
+  // The example questions are redrawn for each plan, so listen on their container
+  $("#ask-chips").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip-btn");
+    if (chip) ask(chip.dataset.question);
+  });
   $("#btn-approve").addEventListener("click", openApproval);
   $("#btn-quick-approve")?.addEventListener("click", openApproval);
   $("#approve-form").addEventListener("submit", submitApproval);
@@ -165,6 +169,10 @@ export async function analyze(payload, { fresh = false } = {}) {
   const seq = ++analysisSeq;
   stopReading(); // the old recommendation is about to be replaced
   priorityChange = null;
+  // A new report is a new conversation
+  chatHistory = [];
+  clear($("#chat-log"));
+  $("#whatif-diff-banner").hidden = true;
   busy = true;
   // Until the new answer arrives, the previous one is greyed out and can't be approved
   $("#view-decide").classList.add("is-reanalyzing");
@@ -627,8 +635,36 @@ function renderBasis(d) {
       change.changed ? `Changed from: ${change.from}` : "Still the best plan for these priorities") : null);
 }
 
+/** Example questions in plain words that fit the plan on screen. */
+const STRATEGY_PHRASE = { MACHINE_TRANSFER: "move the work to another machine", OVERTIME: "use overtime", RESEQUENCE: "re-order the queue" };
+function renderAskChips(d) {
+  const sp = d.selected_plan;
+  const box = $("#ask-chips");
+  if (!sp) { clear(box); return; }
+  const hrs = d.impact_summary?.downtime_hours;
+  const chip = (label, question, title = "") => h("button", { type: "button", class: "chip-btn", "data-question": question, title }, label);
+  const agentTag = () => h("span", { class: "chip-agent" }, " ⚙ new simulation");
+  const runnerUp = (d.feasible_alternatives || [])
+    .filter((p) => p.strategy_type !== sp.strategy_type)
+    .sort((a, b) => (b.weighted_score || 0) - (a.weighted_score || 0))[0];
+  const agentTitle = "A Google ADK agent runs new simulations with the engine to answer this";
+  const target = sp.strategy_type === "MACHINE_TRANSFER" ? sp.target_machine_id : null;
+  clear(box,
+    d.applied_constraints?.disallow_overtime ? null : chip("What if overtime isn't allowed?", "What if overtime is not allowed?"),
+    runnerUp ? chip(`Why not ${STRATEGY_PHRASE[runnerUp.strategy_type] || "use the other option"} instead?`,
+      `Why not ${STRATEGY_PHRASE[runnerUp.strategy_type] || "use the other option"} instead of the recommended plan?`) : null,
+    target
+      ? h("button", { type: "button", class: "chip-btn", "data-question": `What if ${target} also breaks down for ${num(hrs, 0)} hours?`, title: agentTitle },
+          `What if ${target} breaks down too?`, agentTag())
+      : h("button", { type: "button", class: "chip-btn", "data-question": `What if the repair takes ${num(hrs * 2, 0)} hours instead of ${num(hrs, 0)}?`, title: agentTitle },
+          `What if the repair takes ${num(hrs * 2, 0)} h?`, agentTag()),
+    chip("Explain this to my director", "Explain this decision to my plant director in 3 short lines."),
+  );
+}
+
 function renderRecommendation(d) {
   renderBasis(d);
+  renderAskChips(d);
   const sp = d.selected_plan;
   const brief = d.decision_brief;
   const machine = d.impact_summary.machine_id;
@@ -1051,7 +1087,7 @@ async function ask(question) {
   const input = $("#ask-input");
   input.value = "";
   log.appendChild(h("div", { class: "msg msg-user" }, question));
-  const pending = h("div", { class: "msg msg-ai msg-pending" }, "Analyzing what-if sensitivity…");
+  const pending = h("div", { class: "msg msg-ai msg-pending" }, "Thinking… (the agent may run new simulations)");
   log.appendChild(pending);
   const btn = $("#btn-ask");
   setLoading(btn, true);
@@ -1097,7 +1133,8 @@ async function ask(question) {
   }
 
   try {
-    const res = await api.ask(question, state.decision);
+    const res = await api.ask(question, state.decision, chatHistory);
+    chatHistory = [...chatHistory, { question, answer: res.answer || "" }].slice(-3);
     pending.replaceWith(h("div", { class: "msg msg-ai" },
       h("div", { class: "prose" }, renderMarkdown(res.answer)),
       res.tools_used?.length ? toolTrace(res.tools_used) : null,

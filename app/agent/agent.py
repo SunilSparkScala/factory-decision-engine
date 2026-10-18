@@ -167,7 +167,7 @@ class FactoryDecisionAgent:
             "constraints": {k: v for k, v in (prev.applied_constraints or {}).items() if v},
         }
 
-    def _ask_with_agent(self, question: str, decision: DecisionResponse) -> Dict[str, Any]:
+    def _ask_with_agent(self, question: str, decision: DecisionResponse, history=None) -> Dict[str, Any]:
         """
         Answer a question with the Google ADK tool-calling agent. The agent may run NEW simulations
         and evaluations (other machines, durations, priorities) through the deterministic tools, so
@@ -177,6 +177,7 @@ class FactoryDecisionAgent:
         import uuid
         from google.genai import types
 
+        from app.agent.assistant import format_history
         from app.agent.specialists import build_decision_context, find_ungrounded_numbers
         from app.ai.llm import compact_json
 
@@ -193,7 +194,7 @@ class FactoryDecisionAgent:
             f"CURRENT SCENARIO: {scenario_line}\n\n"
             f"CURRENT DECISION (from the deterministic engine):\n{compact_json(context)}\n\n"
             f"EVIDENCE ALREADY RETRIEVED:\n{compact_json(evidence, 4000)}\n\n"
-            f"QUESTION FROM THE PLANT MANAGER:\n{question}"
+            f"{format_history(history)}QUESTION FROM THE PLANT MANAGER:\n{question}"
         )
         user_msg = types.Content(role="user", parts=[types.Part.from_text(text=message)])
 
@@ -421,7 +422,7 @@ class FactoryDecisionAgent:
         res.ai_components = comps
         return res
 
-    def ask(self, question: str, decision: DecisionResponse) -> Dict[str, Any]:
+    def ask(self, question: str, decision: DecisionResponse, history=None) -> Dict[str, Any]:
         """
         Grounded Q&A about a decision. The ADK tool-calling agent answers first (it can run new
         simulations); if it is unavailable or fails, fall back to a single grounded Gemini call,
@@ -429,11 +430,11 @@ class FactoryDecisionAgent:
         """
         if self.live_ai:
             try:
-                return self._ask_with_agent(question, decision)
+                return self._ask_with_agent(question, decision, history)
             except Exception as e:
                 # Never surface the raw error (it may contain credentials); just degrade
                 logger.warning(f"ADK ask agent failed ({type(e).__name__}); using single-call answer.")
-        return answer_question(self.llm, question, decision)
+        return answer_question(self.llm, question, decision, history)
 
     def reset_state(self) -> None:
         """Reset cached scenario state."""

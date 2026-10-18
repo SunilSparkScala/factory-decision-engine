@@ -72,7 +72,7 @@ export const api = {
   whatIf: (previous, followUpPrompt) => request("POST", "/api/what-if", { previous_response: previous, follow_up_prompt: followUpPrompt }),
   rerank: (decision, priorities) => request("POST", "/api/rerank", { decision, priorities }),
   review: (decision) => request("POST", "/api/review", { decision }),
-  ask: (question, decision) => request("POST", "/api/ask", { question, decision }),
+  ask: (question, decision, history = []) => request("POST", "/api/ask", { question, decision, history }),
   approve: (decision, approver, note, incidentId) => request("POST", "/api/approve", { decision, approver, note, incident_id: incidentId || null }),
   decisions: () => request("GET", "/api/decisions"),
 };

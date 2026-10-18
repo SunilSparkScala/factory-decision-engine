@@ -519,3 +519,30 @@ def test_specialists_are_told_what_the_engine_verified():
     assert decision.selected_plan.target_machine_id == "M26"
     assert "NW-Speaker" in ctx["recommended_plan"]["target_line_builds"]
     assert "Line C (Thermostats) is qualified to build NW-Speaker" in ctx["engine_verified"]
+
+
+def test_ask_follow_up_carries_the_last_three_exchanges():
+    """'And what would that cost?' only makes sense with the earlier questions and answers."""
+    from app.agent.assistant import format_history
+
+    history = [{"question": f"Q{i}", "answer": f"A{i}"} for i in range(5)]
+    text = format_history(history)
+    assert "Q2" in text and "Q4" in text and "Q1" not in text  # only the last three
+    assert format_history([]) == ""
+
+    seen = {}
+
+    class FakeLLM:
+        available = True
+
+        def generate_json(self, prompt, schema, system=None, temperature=0.2):
+            seen["prompt"] = prompt
+            return schema(answer="It would cost $100.", citations=[], confidence="high")
+
+    from app.agent.assistant import answer_question
+
+    decision = DecisionOrchestrator().orchestrate(machine_id="M17", downtime_hours=8.0, priorities="delivery cost")
+    res = answer_question(FakeLLM(), "And what would that cost?", decision,
+                          history=[{"question": "What if we move the work to M26?", "answer": "M26 can take it."}])
+    assert "EARLIER IN THIS CONVERSATION" in seen["prompt"] and "move the work to M26" in seen["prompt"]
+    assert res["grounding_check"]["passed"]
