@@ -3,7 +3,8 @@
 > Before you change the factory, understand what happens next.
 
 **[Open the live demo](https://factory-decision-engine-627710168651.asia-south1.run.app)** (no login, runs on
-Google Cloud Run with Gemini on Vertex AI) · Google Cloud AI Builder Cup 2026, theme *Manufacturing:
+Google Cloud Run with Gemini on Vertex AI) · **[Watch the 3:45 demo video](https://www.youtube.com/watch?v=A9B7e9bdhCQ)** ·
+Google Cloud AI Builder Cup 2026, theme *Manufacturing:
 Intelligent Operations & Industrial Efficiency* · Team **The Latency Breakers**: Aakash Doulwani (lead),
 Sunil Raju
 
