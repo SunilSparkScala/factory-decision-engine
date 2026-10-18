@@ -50,8 +50,6 @@ identical numbers under different names. Set `FDE_INDUSTRY_SWITCH=true` to show 
 
 ## Quick walkthrough for judges (3 minutes)
 
-How the project maps to the judging criteria: [docs/HACK2SKILL_JUDGING_COMPLIANCE.md](docs/HACK2SKILL_JUDGING_COMPLIANCE.md).
-
 1. **Open the [live demo](https://factory-decision-engine-627710168651.asia-south1.run.app).** A short
    guided tour starts on the first visit (the **?** button replays it). The app opens in light mode;
    the ☀ button switches theme for that tab.
