@@ -1157,11 +1157,26 @@ function openApproval() {
   const d = state.decision;
   if (!d?.selected_plan) return;
   const sp = d.selected_plan;
+  const machine = d.impact_summary.machine_id;
+  // What happened, in plain words: the fault report if the analysis came from an alert
+  const what = currentIncidentContext?.kind === "fault" ? currentIncidentContext.title : `${machine} down for ${hours(d.impact_summary.downtime_hours)}`;
+  const verdict = $("#warroom-consensus")?.textContent.trim();
   clear($("#approve-summary"),
-    h("div", {}, h("strong", {}, planText(sp, d.impact_summary.machine_id))),
-    h("div", {}, `${d.scenario_summary} · extra cost ${usd(sp.cost_impact_usd)}`),
-    d.decision_brief?.specialist_consensus ? h("div", {}, d.decision_brief.specialist_consensus) : null,
+    h("div", {}, h("strong", {}, planText(sp, machine))),
+    h("div", {}, `${what} · extra cost ${usd(sp.cost_impact_usd)}`),
+    verdict ? h("div", {}, `Specialists: ${verdict.replace(/^[✓⚠]\s*/, "")}`) : null,
   );
+  // What the approver commits to: each specialist's condition
+  const conditions = (d.specialist_assessments || []).filter((a) => (a.key_concern || "").trim());
+  clear($("#approve-conditions"), conditions.length
+    ? h("div", { class: "approve-conditions" },
+        h("div", { class: "approve-conditions-title" }, "You approve with these conditions:"),
+        h("ul", {}, conditions.map((a) => h("li", {}, h("strong", {}, `${AGENT_ICONS[a.agent] || "◆"} ${a.title}: `), a.key_concern))))
+    : null);
+  $("#approver-ack-text").textContent = conditions.length
+    ? "I have reviewed the plan, its impact and the conditions above."
+    : "I have reviewed the plan and its impact.";
+  $("#approve-error").hidden = true;
   // Each objection must be acknowledged explicitly before the plan can be approved
   clear($("#approve-objections"), objectionsOf(d).map((o) =>
     h("label", { class: "check check-warn" },
@@ -1181,7 +1196,20 @@ function closeApproval() {
 async function submitApproval(e) {
   e.preventDefault();
   const name = $("#approver-name").value.trim();
-  if (!name) return;
+  // Say plainly what is missing instead of relying on the browser's tooltip
+  const missing = [
+    !name ? "your name and role" : null,
+    !$("#approver-ack").checked ? "the confirmation tick" : null,
+    [...$$(".objection-ack")].some((b) => !b.checked) ? "the objection tick" : null,
+  ].filter(Boolean);
+  const err = $("#approve-error");
+  if (missing.length) {
+    err.textContent = `To approve, please add ${missing.join(" and ")}.`;
+    err.hidden = false;
+    (!name ? $("#approver-name") : $("#approver-ack")).focus();
+    return;
+  }
+  err.hidden = true;
   try { localStorage.setItem("fde-approver", name); } catch { /* storage unavailable */ }
   const btn = $("#btn-confirm-approve");
   setLoading(btn, true);
@@ -1203,6 +1231,11 @@ async function submitApproval(e) {
   }
 }
 
+/** "1. Halt… 2. Transfer…" on one line becomes one step per line ("8.0 hours" is left alone). */
+function docLines(text) {
+  return (text || "").replace(/\s+(?=\d{1,2}\.\s)/g, String.fromCharCode(10)).replace(/\s+(?=-\s[A-Z0-9])/g, String.fromCharCode(10)).trim();
+}
+
 export function documentTabs(docs) {
   const tabs = [
     ["supervisor_work_order", "Supervisor work order"],
@@ -1220,8 +1253,8 @@ export function documentTabs(docs) {
     },
   }, label));
   const show = (key) => clear(panel,
-    h("button", { class: "btn btn-secondary btn-sm doc-copy", onclick: () => copyText(docs[key] || "") }, "Copy"),
-    docs[key] || "—");
+    h("button", { class: "btn btn-secondary btn-sm doc-copy", onclick: () => copyText(docLines(docs[key])) }, "Copy"),
+    docLines(docs[key]) || "—");
   show(tabs[0][0]);
   return h("div", {}, h("div", { class: "doc-tabs", role: "tablist" }, buttons), panel);
 }
@@ -1232,7 +1265,11 @@ function renderApproval(entry) {
     h("div", { class: "approved-banner" },
       h("span", {}, `✓ Approved by ${entry.approved_by}`),
       h("span", { class: "badge badge-mono" }, entry.decision_id),
-      h("span", { class: "fine-print" }, entry.source === "gemini" ? "Documents drafted by Gemini from engine data" : "Documents from templates (AI unavailable)")),
+      h("span", { class: "fine-print" }, entry.source === "gemini" ? "Documents drafted by Gemini from engine data" : "Documents from templates (AI unavailable)"),
+      entry.grounding_check ? h("span", { class: `badge ${entry.grounding_check.passed ? "badge-grounding" : "badge-warn"}`, title: entry.grounding_check.passed
+        ? "Every number in these documents appears in the engine data, the documents or your note."
+        : `Not found in the data: ${entry.grounding_check.ungrounded_numbers.join(", ")}` },
+        entry.grounding_check.passed ? "✓ Numbers traced to engine data" : "⚠ Check the numbers") : null),
     documentTabs(entry.documents));
   box.hidden = false;
   $("#btn-approve").disabled = true;

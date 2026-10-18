@@ -556,3 +556,36 @@ def test_decision_lists_the_real_assumed_rates():
     text = " ".join(decision.assumptions)
     assert f"${cfg.OVERTIME_COST_PER_HOUR:g} per hour" in text and f"${cfg.TRANSFER_BASE_COST:g}" in text
     assert "kWh per unit" in text and "lasts 8 h" in text
+
+
+def test_approval_documents_carry_the_conditions_and_are_checked():
+    """The work order must include what the specialists required, use readable names, and be grounding-checked."""
+    from app.agent.assistant import generate_action_documents, readable_codes
+
+    assert readable_codes("Monitor STA_B2 on LINE_C under PLAN_TRANSFER_07.") == "Monitor Station B2 on Line C (Thermostats)." or \
+        "STA_B2" not in readable_codes("Monitor STA_B2 on LINE_C under PLAN_TRANSFER_07.")
+
+    decision = DecisionOrchestrator().orchestrate(machine_id="M17", downtime_hours=8.0, priorities="delivery cost")
+    decision.specialist_assessments = [
+        {"agent": "quality", "title": "Quality", "stance": "caution", "headline": "FAI needed",
+         "assessment": "x", "key_concern": "First Article Inspection on M26 before volume.", "citations": []},
+        {"agent": "energy", "title": "Energy & Sustainability", "stance": "support", "headline": "fine",
+         "assessment": "x", "key_concern": None, "citations": []},
+    ]
+    seen = {}
+
+    class FakeLLM:
+        available = True
+
+        def generate_json(self, prompt, schema, system=None, temperature=0.2):
+            seen["prompt"], seen["system"] = prompt, system
+            return schema(supervisor_work_order="1. Move work to M26 at STA_C1. 2. Do FAI per PLAN_TRANSFER_07.",
+                          quality_notice="FAI required.", revised_schedule_summary="- O1045: follow plan",
+                          customer_message="Your order is protected; extra cost is $999.")
+
+    pack = generate_action_documents(FakeLLM(), decision, "Pradeep, Shift Manager", "Start FAI first.")
+    assert "First Article Inspection on M26 before volume." in seen["prompt"]
+    assert "SPECIALIST_CONDITIONS" in seen["system"] or "specialist condition" in seen["system"].lower()
+    assert pack["conditions"] == [{"specialist": "Quality", "condition": "First Article Inspection on M26 before volume."}]
+    assert "STA_C1" not in pack["documents"]["supervisor_work_order"] and "PLAN_TRANSFER_07" not in pack["documents"]["supervisor_work_order"]
+    assert pack["grounding_check"]["passed"] is False and "999" in pack["grounding_check"]["ungrounded_numbers"]

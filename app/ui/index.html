@@ -610,7 +610,7 @@
         <h2 id="approve-title">Approve Recovery Plan &amp; Draft Documents</h2>
         <button class="icon-btn" data-close aria-label="Close">✕</button>
       </div>
-      <form id="approve-form">
+      <form id="approve-form" novalidate>
         <div class="modal-body">
           <div class="approve-summary" id="approve-summary"></div>
           <label class="field">
@@ -622,10 +622,12 @@
             <textarea id="approver-note" rows="2" placeholder="Special floor instructions or coordination notes"></textarea>
           </label>
           <div id="approve-objections"></div>
+          <div id="approve-conditions"></div>
           <label class="check">
             <input type="checkbox" id="approver-ack" required>
-            <span>I have verified the impact, specialist risk conditions, and engineering evidence.</span>
+            <span id="approver-ack-text">I have reviewed the plan, its impact and the conditions above.</span>
           </label>
+          <p class="approve-error" id="approve-error" role="alert" hidden></p>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-ghost" data-close>Cancel</button>

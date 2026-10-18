@@ -8,6 +8,7 @@ Gemini only rephrases and organizes facts from the deterministic DecisionRespons
 function has a deterministic template fallback so the workflow never blocks on the LLM.
 """
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -33,8 +34,21 @@ class GroundedAnswer(BaseModel):
     confidence: str = Field(description="'high' if fully answered by the data, 'partial' or 'low' otherwise.")
 
 
+DOCUMENT_RULES = """Document rules:
+- The supervisor work order must include every specialist condition in SPECIALIST_CONDITIONS, in a sensible
+  order with the Decision Lead's next steps; the quality notice must include the quality conditions.
+- Use readable names: machine IDs like M26 are fine, but never internal codes such as PLAN_TRANSFER_07,
+  STA_B2 or LINE_C (write "Station B2", "Line C (Thermostats)", "the approved plan").
+- Put each numbered step and each order on its own line ("1. ...", "- ...").
+- Mention only risks that appear in the data or the conditions; do not add others.
+- The plan is already approved: never list "obtain approval" as a step.
+- Never mention internal field names (such as "rule-based risks", "decision data", "specialist_conditions").
+- Write dates and times as "2 Oct, 17:00", never as raw timestamps; say what changes for each order.
+- The customer update goes outside the plant: no document IDs, machine IDs or internal terms in it."""
+
+
 class ActionDocuments(BaseModel):
-    supervisor_work_order: str = Field(description="Numbered shop-floor instructions for the shift supervisor.")
+    supervisor_work_order: str = Field(description="Numbered shop-floor instructions for the shift supervisor, one step per line.")
     quality_notice: str = Field(description="Notice to the quality team: inspections/holds required, with citations.")
     revised_schedule_summary: str = Field(description="What changes for each affected order, as a short list.")
     customer_message: str = Field(description="Short professional update for the account manager to send to the "
@@ -141,6 +155,10 @@ def generate_action_documents(
 ) -> Dict[str, Any]:
     """Draft the post-approval communication pack for the approved plan."""
     context = build_decision_context(decision, decision.robustness)
+    # What the approver signed up to: the specialists' conditions and the Decision Lead's next steps
+    conditions = _specialist_conditions(decision)
+    context["specialist_conditions"] = conditions
+    context["decision_lead_next_steps"] = (decision.decision_brief or {}).get("next_steps") or []
     evidence = _evidence_list(decision)
     approved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -155,15 +173,20 @@ def generate_action_documents(
         res = llm.generate_json(
             prompt, ActionDocuments,
             system="You draft operational documents for a manufacturing plant after a human-approved decision.\n"
-                   + GROUNDING_RULES,
+                   + GROUNDING_RULES + "\n" + DOCUMENT_RULES,
             temperature=0.3,
         )
         if res is not None:
-            docs = res.model_dump()
+            docs = {k: readable_codes(v) for k, v in res.model_dump().items()}
             source = "gemini"
 
     if docs is None:
         docs = _template_documents(decision, approver, note)
+
+    # Same check as every other AI text: numbers must exist in the data, the evidence or the approver's note
+    ungrounded = find_ungrounded_numbers(
+        list(docs.values()), compact_json(context, 50_000) + compact_json(evidence, 50_000) + (note or "") + approver
+    ) if source == "gemini" else []
 
     return {
         "approved_by": approver,
@@ -174,14 +197,39 @@ def generate_action_documents(
         "scenario": decision.scenario_summary,
         "documents": docs,
         "source": source,
+        "conditions": conditions,
+        "grounding_check": {"ungrounded_numbers": ungrounded, "passed": not ungrounded},
     }
+
+
+def _specialist_conditions(decision) -> List[Dict[str, str]]:
+    return [
+        {"specialist": a.get("title"), "condition": a.get("key_concern")}
+        for a in (decision.specialist_assessments or [])
+        if (a.get("key_concern") or "").strip() and a.get("key_concern").strip().lower() != "none"
+    ]
+
+
+_STATION_RE = re.compile(r"\bSTA_([A-Z])(\d)\b")
+_LINE_RE = re.compile(r"\bLINE_([A-Z])\b")
+_PLAN_RE = re.compile(r"\s*\(?\b(?:under |plan )?PLAN_[A-Z]+_\d+\b\)?")
+
+
+def readable_codes(text: str) -> str:
+    """Last safety net for documents that leave the plant: no internal codes."""
+    from app.domains import get_pack
+
+    lines = get_pack().get("lines", {})
+    text = _STATION_RE.sub(lambda m: f"Station {m.group(1)}{m.group(2)}", text or "")
+    text = _LINE_RE.sub(lambda m: lines.get(f"LINE_{m.group(1)}", f"Line {m.group(1)}"), text)
+    return _PLAN_RE.sub("", text)
 
 
 def _template_documents(decision, approver: str, note: Optional[str]) -> Dict[str, str]:
     sp = decision.selected_plan
     orders = decision.affected_orders
     order_lines = "\n".join(
-        f"- {o['order_id']} ({o['priority']}, {o['quantity']} x {o['product_model']}): follow {sp.plan_id if sp else 'manual plan'}"
+        f"- {o['order_id']} ({o['priority']}, {o['quantity']} x {o['product_model']}): follow {'the approved plan' if sp else 'a manual plan'}"
         for o in orders
     ) or "- No orders affected."
     high = [o for o in orders if o.get("priority") == "HIGH"]
@@ -190,7 +238,9 @@ def _template_documents(decision, approver: str, note: Optional[str]) -> Dict[st
         "supervisor_work_order": (
             f"Approved by {approver}.\n1. Execute: {_plan_label(decision)}.\n"
             "2. Complete setup and calibration before volume run.\n"
-            "3. Report progress to the plant manager at shift midpoint."
+            + "".join(f"{i}. {c['specialist']} condition: {c['condition']}\n"
+                      for i, c in enumerate(_specialist_conditions(decision), start=3))
+            + f"{3 + len(_specialist_conditions(decision))}. Report progress to the plant manager at shift midpoint."
             + (f"\nNote: {note}" if note else "")
         ),
         "quality_notice": (
