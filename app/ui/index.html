@@ -11,9 +11,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css?v=2.2">
   <script>
-    // Apply saved theme before first paint; first-time visitors get the light theme
+    // The app always opens in the light theme; a switch to dark lasts only while this tab is open
     try {
-      const t = localStorage.getItem("fde-theme");
+      const t = sessionStorage.getItem("fde-theme");
       document.documentElement.dataset.theme = t || "light";
     } catch (e) {}
   </script>

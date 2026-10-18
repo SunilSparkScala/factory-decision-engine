@@ -66,7 +66,7 @@ function initTheme() {
     const current = root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     const next = current === "dark" ? "light" : "dark";
     root.dataset.theme = next;
-    try { localStorage.setItem("fde-theme", next); } catch { /* storage unavailable */ }
+    try { sessionStorage.setItem("fde-theme", next); } catch { /* storage unavailable */ }
   });
 }
 
