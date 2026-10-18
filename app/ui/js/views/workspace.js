@@ -9,6 +9,7 @@ import {
   machineTypeLabel, stationOperation,
 } from "../format.js";
 import { renderPlantMap } from "../components/plant-map.js?v=2.1";
+import { attachMic, attachReadAloud, recommendationParts, stopReading } from "../components/voice.js";
 
 const STEP_IDS = ["#step-impact", "#step-options", "#step-recommendation", "#step-approve"];
 const AGENT_ICONS = { production: "🏭", quality: "🔍", maintenance: "🔧", energy: "⚡" };
@@ -36,6 +37,10 @@ export function init(context) {
   });
 
   $("#btn-clear-incident")?.addEventListener("click", detachIncident);
+  // Voice: speak the report or question (the manager still presses Analyze/Ask), hear the result
+  attachMic($("#scenario-input"), { before: $("#btn-analyze") });
+  attachMic($("#ask-input"));
+  attachReadAloud($("#step-recommendation .rec-badge-row"), () => recommendationParts($("#step-recommendation")));
 
   // Example reports fill the box so the user sees exactly what will be sent; they press Analyze
   for (const btn of $$("#step-input .example-btn")) {
@@ -158,6 +163,7 @@ export async function analyze(payload, { fresh = false } = {}) {
 
   // A newer request replaces one still running (e.g. the manager went back and opened another alert)
   const seq = ++analysisSeq;
+  stopReading(); // the old recommendation is about to be replaced
   priorityChange = null;
   busy = true;
   // Until the new answer arrives, the previous one is greyed out and can't be approved
