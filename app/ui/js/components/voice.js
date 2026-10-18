@@ -78,6 +78,12 @@ function setMicState(btn, mode) {
 
 // One small honest label under each box: who turned the speech into text
 const notes = new WeakMap();
+// What was in the box before the manager spoke, so it can be put back
+const previousText = new WeakMap();
+
+function rememberPrevious(input) {
+  previousText.set(input, input.value.trim());
+}
 
 function showNote(input, source) {
   let note = notes.get(input);
@@ -91,10 +97,17 @@ function showNote(input, source) {
   note.textContent = source === "gemini"
     ? "✦ Transcribed by Gemini. Check the words, then send."
     : "Transcribed by the browser. Check the words, then send.";
+  const previous = previousText.get(input);
+  if (previous && previous !== input.value.trim()) {
+    note.append(" ", h("button", {
+      type: "button", class: "link-btn voice-restore",
+      onclick: () => { input.value = previous; previousText.delete(input); showNote(input, null); input.focus(); },
+    }, "↩ Restore previous text"));
+  }
   note.hidden = false;
 }
 
-/** Put recognised words in the box after anything already typed (e.g. "M17 will be down for "). */
+/** Put the recognised words in the box (base is "" because speaking replaces what was there). */
 function fill(input, base, words) {
   input.value = base + (base ? words.replace(/\s+/g, " ").trim() : tidy(words));
 }
@@ -119,8 +132,9 @@ function listen(input, btn) {
   rec.lang = LANG;
   rec.interimResults = true;
   rec.continuous = true; // a pause to think must not end the report; the manager clicks to stop
-  // Keep what was already typed (e.g. "M17 will be down for ") and add the spoken words after it
-  const base = input.value.trim() ? `${input.value.trimEnd()} ` : "";
+  // Speaking gives a new report: it replaces the box (the note offers to restore the old text)
+  rememberPrevious(input);
+  const base = "";
   let heard = "";
   let timer = null;
 
@@ -201,7 +215,8 @@ async function record(input, btn) {
     return;
   }
 
-  const base = input.value.trim() ? `${input.value.trimEnd()} ` : "";
+  rememberPrevious(input);
+  const base = ""; // the transcript replaces the box; the note offers to restore the old text
   const chunks = [];
   let timer = null;
   rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
@@ -342,6 +357,15 @@ export function recommendationParts(card) {
   const parts = [];
   const title = text("#rec-title");
   if (title) parts.push(`Recommendation: ${title}`);
+  // The two figures a manager asks first: what it costs and what happens to deliveries
+  const figure = (label) => [...card.querySelectorAll("#rec-figures .fig")]
+    .find((f) => f.querySelector(".fig-label")?.textContent.trim().toLowerCase() === label)
+    ?.querySelector(".fig-value")?.textContent.trim();
+  const cost = figure("extra cost");
+  const delivery = figure("delivery");
+  if (cost || delivery) {
+    parts.push([cost ? `Extra cost ${cost}` : null, delivery ? `delivery: ${delivery.toLowerCase()}` : null].filter(Boolean).join(", "));
+  }
   const verdict = text("#warroom-consensus");
   if (verdict) parts.push(`Specialist review: ${verdict}`);
   for (const agent of card.querySelectorAll(".agent-card")) {
