@@ -1,7 +1,7 @@
 // Factory Decision Engine — UI entry point.
 // Wires the header, the left navigation and the four views.
 
-import { $, $$, h, clear, toast } from "./js/dom.js";
+import { $, $$, h, clear, toast, renderMarkdown } from "./js/dom.js";
 import { api, getDomain, setDomain } from "./js/api.js";
 import { state } from "./js/state.js";
 import { plantTime, setOperationNames } from "./js/format.js";
@@ -197,29 +197,50 @@ async function initDomains() {
   }
 }
 
+const DOC_TYPES = {
+  engineering_constraint: "Engineering rule", incident_report: "Incident report", machine_manual: "Machine manual",
+  maintenance: "Maintenance procedure", production_sop: "Production procedure", quality: "Quality rule",
+};
+
+/** "Cited in the current plan" on the documents the analysis on screen relies on. */
+function markCitedDocuments() {
+  const d = state.decision;
+  const cited = new Set([
+    ...(d?.engineering_evidence || []).map((e) => e.document_id),
+    ...(d?.specialist_assessments || []).flatMap((a) => a.citations || []),
+  ]);
+  for (const card of $$("#evidence-catalog .catalog-card")) {
+    const on = cited.has(card.dataset.doc);
+    card.classList.toggle("is-cited", on);
+    $(".cited-tag", card).hidden = !on;
+  }
+}
+
 /** Render full browsable Engineering Evidence catalog */
 async function showEvidenceView() {
   const catalog = $("#evidence-catalog");
   if (!catalog) return;
-  if (catalog.children.length > 0) return; // already loaded
+  if (catalog.children.length > 0) { markCitedDocuments(); return; } // already loaded
 
   try {
     const res = await api.knowledge();
     const docs = res.documents || [];
     if (!docs.length) { clear(catalog, h("p", { class: "empty-note" }, "No documents found.")); return; }
-    clear(catalog, docs.map((doc) => h("article", { class: "catalog-card" },
+    clear(catalog, docs.map((doc) => h("article", { class: "catalog-card", "data-doc": doc.document_id },
       h("div", { class: "catalog-card-header" },
         h("span", { class: "badge badge-mono" }, doc.document_id),
-        h("span", { class: "badge badge-category" }, doc.document_type),
-        doc.machine_ids?.length ? h("span", { class: "badge badge-subtle" }, `Machines: ${doc.machine_ids.join(", ")}`) : null,
+        h("span", { class: "badge badge-category" }, DOC_TYPES[doc.document_type] || doc.document_type),
+        h("span", { class: "badge badge-subtle" }, doc.machine_ids?.length ? `Machines: ${doc.machine_ids.join(", ")}` : "Whole plant"),
+        h("span", { class: "badge badge-grounding cited-tag", hidden: true }, "✓ Cited in the current plan"),
       ),
       h("h3", { class: "catalog-title" }, doc.title),
-      h("p", { class: "catalog-excerpt" }, doc.excerpt),
+      h("p", { class: "catalog-excerpt" }, workspace.readableExcerpt(doc.excerpt)),
       h("details", { class: "catalog-full" },
         h("summary", {}, "Read the full document"),
-        h("pre", { class: "catalog-pre" }, doc.content),
+        h("div", { class: "catalog-doc prose" }, renderMarkdown(doc.content)),
       ),
     )));
+    markCitedDocuments();
   } catch {
     clear(catalog, h("p", { class: "empty-note" }, "Could not load the engineering documents. Try again in a moment."));
   }

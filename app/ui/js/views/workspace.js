@@ -995,12 +995,13 @@ function toggleSourcePreview(btn, id) {
 }
 
 /** Document text without markdown headings or markers, cut at a sentence end (about 320 characters). */
-function readableExcerpt(text) {
+export function readableExcerpt(text) {
   if (!text) return "";
   const plain = text.split(String.fromCharCode(10))
     .filter((line) => !line.trim().startsWith("#"))
     .join(" ")
-    .replace(/[*_`>]+/g, "")
+    .replace(/[*`>]+/g, "") // markdown marks; underscores stay (PICK_AND_PLACE)
+    .replace(/(^|\s)-\s+/g, "$1") // list dashes
     .replace(/\s+/g, " ")
     .replace(/\s\d+\.$/, "") // a dangling list number at the end of the excerpt
     .trim();
@@ -1008,7 +1009,7 @@ function readableExcerpt(text) {
   if (plain.length <= 320 && !truncated) return plain;
   const cut = plain.slice(0, 320);
   const end = cut.lastIndexOf(". ");
-  return end > 120 ? cut.slice(0, end + 1).replace(/\s\d+\.$/, "") : `${cut.trimEnd()}…`;
+  return end > 120 ? cut.slice(0, end + 1).replace(/\s\d+\.$/, "") : `${cut.replace(/[.…\s]+$/, "")}…`;
 }
 
 function jumpToEvidence(id) {
