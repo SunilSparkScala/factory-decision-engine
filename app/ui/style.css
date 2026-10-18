@@ -2114,6 +2114,8 @@ button { cursor: pointer; }
 
 .rec-qualified { font-size: 12px; color: var(--ok-fg); margin-top: 4px; }
 .lead-tag { font-size: 11.5px; font-weight: 600; color: var(--primary); margin: 2px 0 2px; }
+.lead-tag.muted { color: var(--text-3); font-weight: 500; }
+.fig[title]:not([title=""]) { cursor: help; }
 .lead-note { font-weight: 500; color: var(--text-3); text-transform: none; letter-spacing: 0; }
 .cite-label { font-size: 11px; color: var(--text-3); font-weight: 600; margin-right: 2px; align-self: center; }
 

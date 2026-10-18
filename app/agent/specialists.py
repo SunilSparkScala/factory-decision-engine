@@ -42,8 +42,14 @@ class ConcernLink(BaseModel):
 
 class DecisionBrief(BaseModel):
     headline: str = Field(description="The recommended action in plain words, at most 14 words.")
-    summary: str = Field(description="2-3 sentences a plant manager can act on.")
-    why: List[str] = Field(description="3-4 short reasons, each grounded in the data.")
+    summary: str = Field(
+        description="2-3 sentences a plant manager can act on, in words: the trade-off and why this plan. Do not "
+        "repeat cost, energy or unit figures; they are shown next to the summary."
+    )
+    why: List[str] = Field(
+        description="2-3 short reasons in words why this plan beats the other options, each grounded in the data. "
+        "Do not restate the cost, energy or downtime figures."
+    )
     watch_outs: List[str] = Field(description="1-3 conditions or risks to manage.")
     specialist_consensus: str = Field(description="One line, e.g. '3 of 4 specialists support; Quality requires FAI first.'")
     next_steps: List[str] = Field(description="2-4 concrete next steps for the shift, in a sensible order.")

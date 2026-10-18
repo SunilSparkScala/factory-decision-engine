@@ -187,7 +187,7 @@ export async function analyze(payload, { fresh = false } = {}) {
   }
 }
 
-const PROGRESS_LABELS = ["Gemini reads the report", "Engine calculates the options", "4 AI specialists review"];
+const PROGRESS_LABELS = ["Gemini reads the report", "Engine calculates the options", "AI specialists review"];
 
 function startProgress() {
   const box = $("#progress");
@@ -224,8 +224,8 @@ function renderProgressSummary(d) {
     !d.impact_summary?.machine_id ? ["waiting", "Engine waits for your answer above"]
       : ["done", d.selected_plan ? `Engine calculated ${options} options` : "Engine found no feasible plan"],
     !d.selected_plan ? ["waiting", "Specialist review follows"]
-      : review === "gemini" ? ["done", "4 AI specialists reviewed it"]
-      : review === "reviewing" || review === "pending" ? ["active", "4 AI specialists reviewing…"]
+      : review === "gemini" ? ["done", `${d.specialist_assessments?.length || 0} AI specialists reviewed it`]
+      : review === "reviewing" || review === "pending" ? ["active", "AI specialists reviewing…"]
       : review === "failed" ? ["failed", "Specialist review unavailable (retry in the review panel)"]
       : ["waiting", "Specialist review skipped"],
   ];
@@ -636,12 +636,21 @@ function renderRecommendation(d) {
   }
 
   renderObjections(d);
-  $("#rec-lead-tag").hidden = !brief;
+  // Who wrote the explanation, with the real number of reviews (one can time out)
+  const reviews = d.specialist_assessments?.length || 0;
+  const reviewingNow = ["reviewing", "pending"].includes(d.ai_components?.war_room);
+  const leadTag = $("#rec-lead-tag");
+  leadTag.hidden = false;
+  leadTag.classList.toggle("muted", !brief);
+  leadTag.textContent = brief
+    ? `✦ Summary by the Decision Lead (Gemini), combining ${reviews} specialist review${reviews === 1 ? "" : "s"}`
+    : reviewingNow ? "✦ The Decision Lead (Gemini) is reviewing the new plan…"
+    : "Explanation from the engine's rules (AI review not available for this result)";
   $("#rec-title").textContent = brief?.headline || planText(sp, machine);
   $("#rec-summary").textContent = brief?.summary
     || `${planText(sp, machine)}. Chosen by the optimizer as the best balance of delivery, cost, quality, energy and risk under your priorities.`;
   $("#rec-plan-id").textContent = sp.plan_id;
-  $("#rec-strategy").title = sp.plan_id; // the internal plan code stays available on hover
+  $("#rec-title").title = `${strategyLabel(sp.strategy_type)} · ${sp.plan_id}`; // plan code on hover
   $("#rec-strategy").textContent = strategyLabel(sp.strategy_type);
 
   renderQualifiedNote(d);
@@ -678,11 +687,15 @@ function renderRecommendation(d) {
       sub ? h("div", { class: "fig-sub" }, sub) : null);
 
   clear($("#rec-figures"),
-    fig("Extra cost", usd(sp.cost_impact_usd), "Calculated by the engine"),
-    fig("Delivery", deliveryLabel(sp.delivery_delay_score, best).text, "Compared with the other options"),
-    fig("Quality risk", qualityLabel(sp.quality_penalty_score).text),
-    fig("Operational risk", riskLabel(sp.risk_score).text),
-    fig("Energy", `${num(sp.energy_kwh)} kWh`),
+    fig("Extra cost", usd(sp.cost_impact_usd), "Calculated by the engine",
+      "Extra spend for this plan: setup, overtime and any production that is not recovered."),
+    fig("Delivery", deliveryLabel(sp.delivery_delay_score, best).text, "Compared with the other options",
+      "How close this plan gets to the best delivery result of all options for the affected orders."),
+    fig("Quality risk", qualityLabel(sp.quality_penalty_score).text, "",
+      "Chance the change causes defects, based on the health of the machine taking over the work. Lower is better."),
+    fig("Operational risk", riskLabel(sp.risk_score).text, "",
+      "Chance the plan does not go as planned on the floor: the kind of plan and how much production stays unrecovered. Lower is better."),
+    fig("Energy", `${num(sp.energy_kwh)} kWh`, "", "Energy the plan uses to recover the lost production."),
   );
 
   // Say honestly who wrote the explanation: Gemini, or the rule-based fallback

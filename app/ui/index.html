@@ -315,7 +315,7 @@
                   </div>
                   <div class="header-action-group">
                     <button type="button" class="btn-header-approve" id="btn-quick-approve" title="Review &amp; approve this recommendation">
-                      Approve Plan ✓
+                      Review &amp; approve ✓
                     </button>
                   </div>
                 </div>
@@ -328,22 +328,14 @@
                   <div class="rec-hero-header">
                     <div class="rec-badge-row">
                       <span class="badge badge-mono" id="rec-plan-id" hidden>PLAN_--</span>
-                      <span class="badge badge-strategy" id="rec-strategy">--</span>
+                      <span class="badge badge-strategy" id="rec-strategy" hidden>--</span>
                       <span class="badge badge-route" id="rec-route" hidden></span>
                       <span class="badge badge-grounding" id="rec-grounding" hidden></span>
                     </div>
                     <div class="rec-basis" id="rec-basis" aria-live="polite"></div>
-                    <div class="lead-tag" id="rec-lead-tag" hidden title="A fifth Gemini agent reads the four specialist reviews and writes this summary; it cannot change the engine's recommendation.">✦ Summary by the Decision Lead (Gemini), combining the 4 specialist reviews</div>
+                    <div class="lead-tag" id="rec-lead-tag" hidden title="A Gemini agent reads the specialist reviews and writes this summary; it cannot change the engine's recommendation."></div>
                     <h3 class="rec-title" id="rec-title">Waiting for analysis...</h3>
                     <p class="rec-summary" id="rec-summary"></p>
-                  </div>
-
-                  <!-- Provenance & Data Origin Badges -->
-                  <div class="data-provenance-row">
-                    <span class="prov-tag prov-fact" title="Direct database fact from factory state">Fact: Factory Topology</span>
-                    <span class="prov-tag prov-calc" title="Deterministic Python simulation & physics">Calc: Simulation Math</span>
-                    <span class="prov-tag prov-obj" title="Plans ranked by a weighted score across delivery, cost, quality, energy and risk">Ranking: weighted score</span>
-                    <span class="prov-tag prov-ai" id="rec-ai-source" title="Who wrote the explanation and review">Reasoning: Gemini</span>
                   </div>
 
                   <!-- Primary Evaluation Metrics Figures -->
@@ -368,22 +360,6 @@
                   </div>
                 </div>
 
-                <!-- STEP 6: Mandatory Human Approval Boundary -->
-                <div class="approval-boundary-card" id="step-approve">
-                  <div class="approval-boundary-header">
-                    <div class="approval-icon" aria-hidden="true">⚖</div>
-                    <div>
-                      <strong>Human approval required.</strong>
-                      <p>The engine generates evidence-backed options. Plant dispatch requires human verification.</p>
-                    </div>
-                  </div>
-                  <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-approve">
-                    <span>Review &amp; Approve Recommendation</span>
-                    <span class="btn-icon" aria-hidden="true">✓</span>
-                  </button>
-                  <div id="approval-result" hidden></div>
-                </div>
-
                 <!-- Specialist War Room Accordion/Card -->
                 <div class="warroom-rail-section">
                   <div class="rail-subhead">
@@ -391,6 +367,22 @@
                     <span class="rail-subhint" id="warroom-consensus">Production, Quality, Maintenance &amp; Energy</span>
                   </div>
                   <div class="warroom" id="warroom"></div>
+                </div>
+
+                <!-- STEP 6: Mandatory Human Approval Boundary -->
+                <div class="approval-boundary-card" id="step-approve">
+                  <div class="approval-boundary-header">
+                    <div class="approval-icon" aria-hidden="true">⚖</div>
+                    <div>
+                      <strong>Human approval required.</strong>
+                      <p>Nothing changes in the plant until you approve. Approving records the decision and drafts the floor documents.</p>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-block btn-lg" id="btn-approve">
+                    <span>Review &amp; approve</span>
+                    <span class="btn-icon" aria-hidden="true">✓</span>
+                  </button>
+                  <div id="approval-result" hidden></div>
                 </div>
 
                 <!-- STEP 7: Conversational What-If & Ask the Decision Agent -->
